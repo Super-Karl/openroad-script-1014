@@ -1,0 +1,14 @@
+[INFO ODB-0227] LEF file: Nangate45/Nangate45.lef, created 22 layers, 27 vias, 135 library cells
+[INFO ODB-0128] Design: top
+[INFO ODB-0252]     Updated 4 pins.
+[INFO ODB-0253]     Updated 1 components.
+[INFO ODB-0254]     Updated 3 nets and 3 connections.
+[INFO RSZ-0029] Start input port buffering with BUF_X1.
+[INFO RSZ-0214] Buffering input port clk1.
+[INFO RSZ-0214] Buffering input port in1.
+[INFO RSZ-0027] Inserted 2 BUF_X1 input buffers.
+[INFO RSZ-0031] Start output port buffering with BUF_X1.
+[INFO RSZ-0215] Buffering output port out1.
+[INFO RSZ-0215] Buffering output port out2.
+[INFO RSZ-0028] Inserted 2 BUF_X1 output buffers.
+No differences found.

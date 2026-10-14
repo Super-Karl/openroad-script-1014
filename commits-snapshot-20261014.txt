@@ -1,0 +1,49 @@
+# OpenROAD-flow-scripts commit snapshot
+# Captured: 2026-10-14T19:46:24+08:00
+# Repository: https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts
+# Scope: main repository and all recursive submodules
+# Submodules: 29
+# Format: commit<TAB>path<TAB>state; . is the main repository
+# Only Git commits are recorded; uncommitted changes are NOT backed up.
+# Observed local changes: etc/DependencyInstaller.sh, flow/Makefile, tools/OpenROAD (dirty submodule).
+
+e5cc6e799f5ddf36e6bdf2d8c5db73373b88f52c	.	main
+91e5f5ff2f198fd130e8915c8ad4408b56987fa4	tools/OpenROAD	initialized
+e983e15b2cb346badf8f23725fd3914d25312c44	tools/OpenROAD/src/sta	initialized
+d527cfab4ad731b767ea0a2be2021d920d3afece	tools/OpenROAD/third-party/abc	initialized
+82effc8d9541be69e1ed3ec44759a4449f5d9247	tools/OpenROAD/third-party/slang-elab	initialized
+553ec11ec06fbe0beebfbb45f9dc3c9eabd83d28	tools/OpenROAD/third-party/slang-elab/third_party/fmt	initialized
+f04e81565793c768b747a8fd058f3e7aeceee1b5	tools/OpenROAD/third-party/slang-elab/third_party/slang	initialized
+f70c2e38592d704c8cccf68433b091e82c8118f0	tools/kepler-formal	initialized
+7b99c07f0bcab5824a5a3ce62c7066554017f641	tools/kepler-formal/thirdparty/cadical	initialized
+7f887abba7cf13636a5ac2d28653668a20a91b25	tools/kepler-formal/thirdparty/glucose	initialized
+8af8e56f174b778aef3aa45af9f739b2a5f492c2	tools/kepler-formal/thirdparty/kissat	initialized
+83be8a9e9fc7683de50c22a91f7352a72b3783dd	tools/kepler-formal/thirdparty/naja	initialized
+3db8da80111171c219ab5839905771386bee06b3	tools/kepler-formal/thirdparty/naja/thirdparty/cpptrace	initialized
+52eb8108c5bdec04579160ae17225d66034bd723	tools/kepler-formal/thirdparty/naja/thirdparty/googletest	initialized
+318b8faa01aedd990058854b4de4ee2d779d8237	tools/kepler-formal/thirdparty/naja/thirdparty/naja-if	initialized
+5da040bb34f0e4e5bb8d67223b999a0132fb401f	tools/kepler-formal/thirdparty/naja/thirdparty/naja-verilog	initialized
+52eb8108c5bdec04579160ae17225d66034bd723	tools/kepler-formal/thirdparty/naja/thirdparty/naja-verilog/thirdparty/googletest	initialized
+512c327c209d3043aa98ecfd02d06a1b73fcd5fb	tools/kepler-formal/thirdparty/naja/thirdparty/slang	initialized
+a83cd31548b19d50f3f983b069dceb4f4d50756d	tools/kepler-formal/thirdparty/yaml-cpp	initialized
+a5af9d690a43744bf6b2cc3dea2717c16b54621c	tools/yosys	initialized
+2a9e9c2a00e44abd90fc593edfc2c0ff4573f318	tools/yosys/abc	initialized
+3dddccd478618d68f8a5e160fb4b5783c4da35d4	tools/yosys/frontends/slang/lib	initialized
+1be298e1bd68957e4cd352e1f676f00e07dcfb57	tools/yosys/frontends/slang/lib/third_party/fmt	initialized
+8acc660a20b70de48ecec1c7471863e6f4b3ae6f	tools/yosys/frontends/slang/lib/third_party/slang	initialized
+2b3ac0834f31086c6e3c0e0ceb8516e427d5c39d	tools/yosys/libs/boost_regex	initialized
+4bf61f08697b110d9e3991864650a405b3dd515d	tools/yosys/libs/cxxopts	initialized
+a00f82c6b66dcae15503ba19c1598b2733057dea	tools/yosys/libs/fmt	initialized
+8acc660a20b70de48ecec1c7471863e6f4b3ae6f	tools/yosys/libs/slang	initialized
+5d5e50867437fe5cabd6ab5aad3b3808ec86701f	tools/yosys/libs/symfpu	initialized
+a43ad3787293f4a46b1d70c0924b5a25d10e79fc	tools/yosys/libs/tomlplusplus	initialized
+
+# Restore this version in a clean/new checkout (save local edits first):
+# git fetch origin
+# git checkout --detach e5cc6e799f5ddf36e6bdf2d8c5db73373b88f52c
+# git submodule sync --recursive
+# git submodule update --init --recursive
+# All submodules matched their parent gitlinks at capture time, so the commands
+# above restore all recorded commits. This restores the snapshot, not latest code.
+# After a future update, compare git rev-parse HEAD and
+# git submodule status --recursive against the commit/path table above.

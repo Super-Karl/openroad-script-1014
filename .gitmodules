@@ -1,0 +1,15 @@
+[submodule "tools/yosys"]
+	path = tools/yosys
+	url = ../../The-OpenROAD-Project/yosys.git
+[submodule "tools/kepler-formal"]
+	path = tools/kepler-formal
+	url = https://github.com/keplertech/kepler-formal
+[submodule "tools/OpenROAD/src/sta"]
+	path = tools/OpenROAD/src/sta
+	url = https://github.com/The-OpenROAD-Project/OpenSTA.git
+[submodule "tools/OpenROAD/third-party/abc"]
+	path = tools/OpenROAD/third-party/abc
+	url = https://github.com/The-OpenROAD-Project/abc.git
+[submodule "tools/OpenROAD/third-party/slang-elab"]
+	path = tools/OpenROAD/third-party/slang-elab
+	url = https://github.com/povik/yosys-slang.git

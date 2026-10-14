@@ -1,0 +1,10 @@
+module multi_sink (clk);
+ input clk;
+
+ wire hi_gclk2;
+
+ DFF_X1 \ff0/name  (.CK(hi_gclk2));
+ DFF_X1 \h1/ff1  (.CK(hi_gclk2));
+ CLKGATE_X1 \hi_inst/gclk2_inst  (.CK(clk),
+    .GCK(hi_gclk2));
+endmodule

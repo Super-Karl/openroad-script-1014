@@ -1,0 +1,15 @@
+module multi_sink (clk);
+ input clk;
+
+ hier_block h1 (.childclk(clk));
+endmodule
+
+module hier_block (childclk);
+ input childclk;
+
+ wire gclk;
+
+ CLKGATE_X1 gclk_inst (.CK(childclk),
+     .GCK(gclk));
+ DFF_X1 \ff0/name  (.CK(gclk));
+endmodule
