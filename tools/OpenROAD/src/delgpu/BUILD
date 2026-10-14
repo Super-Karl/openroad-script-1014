@@ -4,6 +4,7 @@
 load("@cuda_local//:defs.bzl", "CUDA_PATH")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(":host_headers.bzl", "host_headers")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
@@ -34,7 +35,7 @@ GPU_ONLY = select({
 
 cc_library(
     name = "gpu_api",
-    hdrs = ["include/delgpu/Gpu.h"],
+    hdrs = ["include/delgpu/Gpu.h", "include/delgpu/Parameters.h", "include/delgpu/GraphCuda.h", "include/delgpu/TrimOptimizer.h"],
     includes = ["include"],
 )
 
@@ -65,9 +66,52 @@ cc_library(
     ],
 )
 
+genrule(
+    name = "graph_cuda_translation_unit",
+    srcs = ["src/graph/GraphCuda.cu"],
+    outs = ["GraphCuda.cuda.cpp"],
+    cmd = "cp $< $@",
+    tags = ["manual"],
+    target_compatible_with = GPU_ONLY,
+)
+
+genrule(
+    name = "optimizer_cuda_translation_unit",
+    srcs = ["src/optimize/TrimOptimizer.cu"],
+    outs = ["TrimOptimizer.cuda.cpp"],
+    cmd = "cp $< $@",
+    tags = ["manual"],
+    target_compatible_with = GPU_ONLY,
+)
+
+cc_library(
+    name = "graph_cuda",
+    srcs = [":graph_cuda_translation_unit", ":optimizer_cuda_translation_unit"],
+    additional_compiler_inputs = [
+        "@cuda_local//:compiler_inputs",
+        "//bazel/gpu:cuda_placement_new.h",
+    ],
+    copts = [
+        "-xcuda",
+        "--cuda-path=" + CUDA_PATH,
+        # PTX allows newer devices to JIT this integer-only graph code.
+        "--cuda-gpu-arch=sm_75",
+        "--cuda-include-ptx=sm_75",
+        "-isystem", CUDA_PATH + "/include/cccl",
+        "-Wno-unknown-cuda-version",
+        "-D_ALLOW_UNSUPPORTED_LIBCPP",
+        "-include", "$(location //bazel/gpu:cuda_placement_new.h)",
+    ],
+    features = ["-layering_check", "-parse_headers"],
+    includes = ["include"],
+    tags = ["manual"],
+    target_compatible_with = GPU_ONLY,
+    deps = [":gpu_api", "@cuda_local//:cudart"],
+)
+
 cc_library(
     name = "gpu_unavailable",
-    srcs = ["src/GpuUnavailable.cpp"],
+    srcs = ["src/GpuUnavailable.cpp", "src/graph/GraphCudaUnavailable.cpp", "src/optimize/TrimOptimizerUnavailable.cpp"],
     deps = [":gpu_api"],
 )
 
@@ -81,6 +125,9 @@ host_headers(
         "//src/utl",
         "@boost.stacktrace",
         "@tcl_lang//:tcl",
+        "//src/web:core",
+        "@boost.geometry",
+        "@boost.polygon",
     ],
 )
 
@@ -88,14 +135,39 @@ cc_library(
     name = "entry",
     # Compilation-only host dependencies have no direct module map.
     features = ["-layering_check"],
-    srcs = ["src/DelGpu.cpp"],
-    hdrs = ["include/delgpu/DelGpu.h"],
+    srcs = [
+        "src/DelGpu.cpp",
+        "src/GraphGraphics.cpp",
+        "src/GraphGraphics.h",
+        "src/graph/BuildGraph.cpp",
+        "src/graph/BuildGraph.h",
+        "src/graph/TrimGeometry.cpp",
+        "src/graph/Vnodes.cpp",
+        "src/graph/Domains.cpp",
+        "src/graph/Arcs.cpp",
+        "src/graph/GraphGpu.cpp",
+        "src/optimize/GpuAdapter.cpp",
+        "src/optimize/RunOptimization.cpp",
+        "src/optimize/RunOptimization.h",
+        "src/optimize/Optimizer.cpp",
+        "src/optimize/StallRepair.cpp",
+    ],
+    hdrs = [
+        "include/delgpu/DelGpu.h",
+        "include/delgpu/Parameters.h",
+        "include/delgpu/Graph.h",
+        "include/delgpu/GraphGpu.h",
+        "include/delgpu/GpuOptimizer.h",
+        "include/delgpu/Optimizer.h",
+        "include/delgpu/Trim.h",
+        "include/delgpu/Rules.h",
+    ],
     includes = ["include"],
     deps = [
         ":gpu_api",
         ":host_headers",
     ] + select({
-        ":gpu_cuda": [":delgpu"],
+        ":gpu_cuda": [":delgpu", ":graph_cuda"],
         "//conditions:default": [":gpu_unavailable"],
     }),
 )
@@ -134,6 +206,7 @@ cc_import(
     name = "module",
     hdrs = [
         "include/delgpu/DelGpu.h",
+        "include/delgpu/Parameters.h",
         "include/delgpu/MakeDelGpu.h",
     ],
     includes = ["include"],
@@ -158,3 +231,25 @@ tcl_wrap_cc(
 )
 
 exports_files(["README.md"])
+
+cc_test(
+    name = "graph_gpu_test",
+    srcs = [
+        "test/GraphGpuTest.cpp",
+        "test/GpuOptimizerTest.cpp",
+        "test/OptimizerTest.cpp",
+        "test/TrimGeometryTest.cpp",
+        "test/DomainTest.cpp",
+        "test/ArcTest.cpp",
+        "test/VnodeTest.cpp",
+    ],
+    features = ["-layering_check"],
+    tags = ["manual", "requires-gpu"],
+    target_compatible_with = GPU_ONLY,
+    deps = [
+        ":entry",
+        ":gpu_api",
+        "//src/odb/src/db",
+        "@googletest//:gtest_main",
+    ],
+)

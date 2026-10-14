@@ -1,0 +1,75 @@
+{
+  "evidence_log": "/workspace/openroad-26/delRun/headless-RY5bMhIR/run.log",
+  "nodes": 328756,
+  "arcs": 431308,
+  "build_seconds": 2.01685,
+  "continuous_seconds": 40.173476742,
+  "postprocess_seconds": 188.594,
+  "del_seconds": 234.489113,
+  "unattributed_seconds": 3.704786258000013,
+  "continuous_share": 0.1713234197870841,
+  "postprocess_share": 0.8042761456477512,
+  "continuous_speedup_10x_overall": 1.1823001315815422,
+  "continuous_speedup_infinite_overall": 1.2067434073532826,
+  "postprocess_layers": [
+    {
+      "layer": "M2",
+      "conflicts": 37,
+      "components": 21297,
+      "nonoptimal_components": 2,
+      "wall_seconds": 107.663,
+      "polish_worker_seconds": 8.827,
+      "legalize_worker_seconds": 421.166
+    },
+    {
+      "layer": "M3",
+      "conflicts": 0,
+      "components": 34808,
+      "nonoptimal_components": 0,
+      "wall_seconds": 54.47,
+      "polish_worker_seconds": 8.412,
+      "legalize_worker_seconds": 209.132
+    },
+    {
+      "layer": "M4",
+      "conflicts": 0,
+      "components": 13343,
+      "nonoptimal_components": 0,
+      "wall_seconds": 12.797,
+      "polish_worker_seconds": 2.242,
+      "legalize_worker_seconds": 48.768
+    },
+    {
+      "layer": "M5",
+      "conflicts": 0,
+      "components": 7341,
+      "nonoptimal_components": 0,
+      "wall_seconds": 5.59,
+      "polish_worker_seconds": 1.177,
+      "legalize_worker_seconds": 20.979
+    },
+    {
+      "layer": "M6",
+      "conflicts": 8,
+      "components": 4715,
+      "nonoptimal_components": 0,
+      "wall_seconds": 6.461,
+      "polish_worker_seconds": 0.866,
+      "legalize_worker_seconds": 24.905
+    },
+    {
+      "layer": "M7",
+      "conflicts": 0,
+      "components": 3565,
+      "nonoptimal_components": 0,
+      "wall_seconds": 1.613,
+      "polish_worker_seconds": 0.271,
+      "legalize_worker_seconds": 6.152
+    }
+  ],
+  "components_total": 85069,
+  "polish_worker_seconds_total": 21.795,
+  "legalize_worker_seconds_total": 731.1020000000001,
+  "iteration_delta_seconds_median": 0.18934647800000048,
+  "cpu_logical_count": 128
+}

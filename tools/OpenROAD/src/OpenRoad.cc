@@ -43,6 +43,10 @@
 #include "est/MakeEstimateParasitics.h"
 #include "exa/MakeExample.h"
 #include "exa/example.h"
+#ifdef ENABLE_DEL
+#include "del/Del.h"
+#include "del/MakeDel.h"
+#endif
 #ifdef ENABLE_DELGPU
 #include "delgpu/DelGpu.h"
 #include "delgpu/MakeDelGpu.h"
@@ -142,6 +146,9 @@ OpenRoad::~OpenRoad()
   delete tapcell_;
   delete macro_placer_;
   delete example_;
+#ifdef ENABLE_DEL
+  delete del_;
+#endif
 #ifdef ENABLE_DELGPU
   delete delgpu_;
 #endif
@@ -283,6 +290,9 @@ void OpenRoad::init(Tcl_Interp* tcl_interp,
   icewall_ = new pad::ICeWall(db_, logger_);
   dft_ = new dft::Dft(db_, sta_, logger_);
   example_ = new exa::Example(db_, logger_);
+#ifdef ENABLE_DEL
+  del_ = new del::Del(logger_);
+#endif
 #ifdef ENABLE_DELGPU
   delgpu_ = new delgpu::DelGpu(logger_);
 #endif
@@ -316,6 +326,9 @@ void OpenRoad::init(Tcl_Interp* tcl_interp,
   tap::initTapcell(tcl_interp);
   mpl::initMacroPlacer(tcl_interp);
   exa::initExample(tcl_interp);
+#ifdef ENABLE_DEL
+  del::initDel(tcl_interp);
+#endif
 #ifdef ENABLE_DELGPU
   delgpu::initDelGpu(tcl_interp);
 #endif

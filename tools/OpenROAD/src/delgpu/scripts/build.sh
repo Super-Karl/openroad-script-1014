@@ -16,7 +16,7 @@ while (($#)); do
 Usage: src/delgpu/scripts/build.sh [--cpu] [--module-only] [-- BAZEL_OPTIONS...]
 
 Build libdelgpu.so and OpenROAD with Bazel (CUDA by default).
-  --cpu          Build without CUDA; the delgpu command reports unavailable.
+  --cpu          Build without CUDA; run delgpu -backend cpu.
   --module-only  Build only libdelgpu.so, e.g. after editing module sources.
   --             Pass remaining options to bazel build (e.g. --jobs=24).
 
@@ -61,4 +61,4 @@ if [[ $backend == cuda ]]; then
     cuda_options+=("--repo_env=OPENROAD_CUDA_PATH=$cuda_root")
   fi
 fi
-exec "$bazel_bin" build --jobs=24 "--//src/delgpu:gpu=$backend" "${cuda_options[@]}" "$@" "${targets[@]}"
+exec "$bazel_bin" build "--jobs=$(nproc)" "--//src/delgpu:gpu=$backend" "${cuda_options[@]}" "$@" "${targets[@]}"

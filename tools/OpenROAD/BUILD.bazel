@@ -78,6 +78,8 @@ config_setting(
 )
 
 OPENROAD_LIBRARY_DEPS = [
+    "//src/del",
+    "//src/del:ui",
     ":openroad_version",
     "//src/ant",
     "//src/ant:ui",
@@ -331,7 +333,7 @@ cc_library(
         "include/ord/Tech.h",
         "include/ord/Timing.h",
     ],
-    defines = ["ENABLE_DELGPU"],
+    defines = ["ENABLE_DELGPU", "ENABLE_DEL"],
     includes = [
         "include",
     ],

@@ -1,0 +1,111 @@
+[INFO ODB-0227] LEF file: /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/src/del/test/gui_repeat.lef, created 1 layers
+[INFO ODB-0128] Design: del_gui_repeat
+[INFO ODB-0133]     Created 3 nets and 0 connections.
+[INFO GUI-0075] Warning: Ignoring XDG_SESSION_TYPE=wayland on Gnome. Use QT_QPA_PLATFORM=wayland to run on Wayland anyway.
+[WARNING GUI-0076] This plugin does not support propagateSizeHints()
+[WARNING GUI-0076] This plugin does not support propagateSizeHints()
+[WARNING GUI-0076] This plugin does not support propagateSizeHints()
+[WARNING GUI-0076] This plugin does not support propagateSizeHints()
+[WARNING GUI-0076] This plugin does not support propagateSizeHints()
+DEL global parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5.0
+DEL run parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5 (configured max_iterations=2)
+DEL init: design=del_gui_repeat insts=0 nets=3 pins=0 (iterms=0, bterms=0) routed_nets=3 special_wire_objects=0 special_wire_boxes=0 routing_layers=1 route_layer_range=[2,-1] dbu_per_micron=1000
+DEL layer M2: begin
+DEL trims: layer=M2 width=0.020000um height=0.040000um count=6
+DEL vnodes: layer=M2 count=6 D=0.100000um Dt=0.100000um Du=0.060000um (5x/5x/3x width)
+DEL domains: layer=M2 limit=0.400000um capped=4 blocked=0 max_move=0.400000um
+DEL arcs: layer=M2 A=0 B=1 C=4 total=5
+DEL build graph: layer=M2 6 trims -> 6 vnodes -> 5 arcs
+DEL timing (ms): layer=M2 buildGraph=1.088 total=1.088
+DEL: skipping layer M3 (missing or invalid routing layer)
+DEL: skipping layer M4 (missing or invalid routing layer)
+DEL: skipping layer M5 (missing or invalid routing layer)
+DEL: skipping layer M6 (missing or invalid routing layer)
+DEL: skipping layer M7 (missing or invalid routing layer)
+DEL vnodes: layers=1 total=6 trims_total=6
+DEL domains: layers=1 blocked=0
+DEL arcs: layers=1 A=0 B=1 C=4 total=5
+DEL optimize: max_iterations=2 alpha=0.01 epsilon=0.01W gradient_max_step=0.2W lambda=10/20/40/80 (25 iterations each, then held at 80); violated arcs with both endpoints stationary for 3 rounds jump 5nm past the barrier midpoint; continuous overlay only
+DEL iteration 0/2: lambda=10 energy=32.919704 rule=3.291970 violations=4 (A=0 B=1 C=3) extent=0.000000um max_violation=0.040000um max_step=0.000000um moved=0 elapsed=0.000s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL step mode: iteration 0/2; enter n in the Tcl console for the next iteration, or c to continue to the iteration limit
+DEL total timing (ms): layers=1 total=1.088 run=3.393
+DEL iteration 1/2: lambda=10 energy=28.695167 rule=2.869143 violations=4 (A=0 B=1 C=3) extent=0.008050um max_violation=0.035950um max_step=0.004000um moved=3 elapsed=0.001s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL iteration 2/2: lambda=10 energy=24.519560 rule=2.451227 violations=4 (A=0 B=1 C=3) extent=0.015174um max_violation=0.032826um max_step=0.004000um moved=3 elapsed=0.001s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL assessment: rule_energy 3.291970 -> 2.451227; exact violations 4 -> 4; last 2 iterations rule reduction=25.54%; still improving; evaluate a larger budget next
+DEL tolerance assessment (<5nm treated as repaired): remaining 4 -> 4; final positive residuals below threshold=0
+DEL continuous stage stopped at iteration budget 2; starting trim postprocess (extent polish and exact conflict legalization)
+DEL continuous-stage residuals (nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_residuals.csv
+DEL continuous-stage unrepaired conflicts (residual >= 5nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_unrepaired.csv
+DEL continuous-stage endpoint displacements (um; overlay only): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_displacements.csv
+DEL postprocess M2: extent polish, then integer trim legalization
+DEL postprocess M2: conflicts=0 (A=0 B=0 C=0) components=2 nonoptimal_components=0 polish_optimal=true elapsed=0.008s polish_worker_seconds=0.006 legalize_worker_seconds=0.009
+DEL postprocess CSVs: *_postprocess.csv, *_postprocess_displacements.csv, *_conflicts.csv (report prefix: /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl.csv)
+DEL final trim conflicts=0 (A=0 B=0 C=0); below_5nm=0 (still conflicts); extent=0.015174 -> 0.015174 -> 0.060000um (continuous -> polish -> legalized); nonoptimal_components=0; ODB unchanged
+DEL global parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5.0
+DEL run parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5 (configured max_iterations=2)
+DEL init: design=del_gui_repeat insts=0 nets=3 pins=0 (iterms=0, bterms=0) routed_nets=3 special_wire_objects=0 special_wire_boxes=0 routing_layers=1 route_layer_range=[2,-1] dbu_per_micron=1000
+DEL layer M2: begin
+DEL trims: layer=M2 width=0.020000um height=0.040000um count=6
+DEL vnodes: layer=M2 count=6 D=0.100000um Dt=0.100000um Du=0.060000um (5x/5x/3x width)
+DEL domains: layer=M2 limit=0.400000um capped=4 blocked=0 max_move=0.400000um
+DEL arcs: layer=M2 A=0 B=1 C=4 total=5
+DEL build graph: layer=M2 6 trims -> 6 vnodes -> 5 arcs
+DEL timing (ms): layer=M2 buildGraph=0.294 total=0.294
+DEL: skipping layer M3 (missing or invalid routing layer)
+DEL: skipping layer M4 (missing or invalid routing layer)
+DEL: skipping layer M5 (missing or invalid routing layer)
+DEL: skipping layer M6 (missing or invalid routing layer)
+DEL: skipping layer M7 (missing or invalid routing layer)
+DEL vnodes: layers=1 total=6 trims_total=6
+DEL domains: layers=1 blocked=0
+DEL arcs: layers=1 A=0 B=1 C=4 total=5
+DEL optimize: max_iterations=2 alpha=0.01 epsilon=0.01W gradient_max_step=0.2W lambda=10/20/40/80 (25 iterations each, then held at 80); violated arcs with both endpoints stationary for 3 rounds jump 5nm past the barrier midpoint; continuous overlay only
+DEL iteration 0/2: lambda=10 energy=32.919704 rule=3.291970 violations=4 (A=0 B=1 C=3) extent=0.000000um max_violation=0.040000um max_step=0.000000um moved=0 elapsed=0.000s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL step mode: iteration 0/2; enter n in the Tcl console for the next iteration, or c to continue to the iteration limit
+DEL total timing (ms): layers=1 total=0.294 run=2.353
+DEL iteration 1/2: lambda=10 energy=28.695167 rule=2.869143 violations=4 (A=0 B=1 C=3) extent=0.008050um max_violation=0.035950um max_step=0.004000um moved=3 elapsed=0.001s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL iteration 2/2: lambda=10 energy=24.519560 rule=2.451227 violations=4 (A=0 B=1 C=3) extent=0.015174um max_violation=0.032826um max_step=0.004000um moved=3 elapsed=0.053s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL assessment: rule_energy 3.291970 -> 2.451227; exact violations 4 -> 4; last 2 iterations rule reduction=25.54%; still improving; evaluate a larger budget next
+DEL tolerance assessment (<5nm treated as repaired): remaining 4 -> 4; final positive residuals below threshold=0
+DEL continuous stage stopped at iteration budget 2; starting trim postprocess (extent polish and exact conflict legalization)
+DEL continuous-stage residuals (nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_residuals.csv
+DEL continuous-stage unrepaired conflicts (residual >= 5nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_unrepaired.csv
+DEL continuous-stage endpoint displacements (um; overlay only): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_displacements.csv
+DEL postprocess M2: extent polish, then integer trim legalization
+DEL postprocess M2: conflicts=0 (A=0 B=0 C=0) components=2 nonoptimal_components=0 polish_optimal=true elapsed=0.007s polish_worker_seconds=0.002 legalize_worker_seconds=0.008
+DEL postprocess CSVs: *_postprocess.csv, *_postprocess_displacements.csv, *_conflicts.csv (report prefix: /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl.csv)
+DEL final trim conflicts=0 (A=0 B=0 C=0); below_5nm=0 (still conflicts); extent=0.015174 -> 0.015174 -> 0.060000um (continuous -> polish -> legalized); nonoptimal_components=0; ODB unchanged
+DEL global parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5.0
+DEL run parameters: max_iterations=2 max_step=0.2W jump_offset_nm=5 (configured max_iterations=2)
+DEL init: design=del_gui_repeat insts=0 nets=3 pins=0 (iterms=0, bterms=0) routed_nets=3 special_wire_objects=0 special_wire_boxes=0 routing_layers=1 route_layer_range=[2,-1] dbu_per_micron=1000
+DEL layer M2: begin
+DEL trims: layer=M2 width=0.020000um height=0.040000um count=6
+DEL vnodes: layer=M2 count=6 D=0.100000um Dt=0.100000um Du=0.060000um (5x/5x/3x width)
+DEL domains: layer=M2 limit=0.400000um capped=4 blocked=0 max_move=0.400000um
+DEL arcs: layer=M2 A=0 B=1 C=4 total=5
+DEL build graph: layer=M2 6 trims -> 6 vnodes -> 5 arcs
+DEL timing (ms): layer=M2 buildGraph=0.334 total=0.334
+DEL: skipping layer M3 (missing or invalid routing layer)
+DEL: skipping layer M4 (missing or invalid routing layer)
+DEL: skipping layer M5 (missing or invalid routing layer)
+DEL: skipping layer M6 (missing or invalid routing layer)
+DEL: skipping layer M7 (missing or invalid routing layer)
+DEL vnodes: layers=1 total=6 trims_total=6
+DEL domains: layers=1 blocked=0
+DEL arcs: layers=1 A=0 B=1 C=4 total=5
+DEL optimize: max_iterations=2 alpha=0.01 epsilon=0.01W gradient_max_step=0.2W lambda=10/20/40/80 (25 iterations each, then held at 80); violated arcs with both endpoints stationary for 3 rounds jump 5nm past the barrier midpoint; continuous overlay only
+DEL iteration 0/2: lambda=10 energy=32.919704 rule=3.291970 violations=4 (A=0 B=1 C=3) extent=0.000000um max_violation=0.040000um max_step=0.000000um moved=0 elapsed=0.000s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL iteration 1/2: lambda=10 energy=28.695167 rule=2.869143 violations=4 (A=0 B=1 C=3) extent=0.008050um max_violation=0.035950um max_step=0.004000um moved=3 elapsed=0.002s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL iteration 2/2: lambda=10 energy=24.519560 rule=2.451227 violations=4 (A=0 B=1 C=3) extent=0.015174um max_violation=0.032826um max_step=0.004000um moved=3 elapsed=0.005s stall_triggered=0 stall_jumped=0 stall_unresolved=0 max_repair=0.000000um remaining_5nm=4 treated_repaired_below_5nm=0
+DEL assessment: rule_energy 3.291970 -> 2.451227; exact violations 4 -> 4; last 2 iterations rule reduction=25.54%; still improving; evaluate a larger budget next
+DEL tolerance assessment (<5nm treated as repaired): remaining 4 -> 4; final positive residuals below threshold=0
+DEL continuous stage stopped at iteration budget 2; starting trim postprocess (extent polish and exact conflict legalization)
+DEL continuous-stage residuals (nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_residuals.csv
+DEL continuous-stage unrepaired conflicts (residual >= 5nm): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_unrepaired.csv
+DEL continuous-stage endpoint displacements (um; overlay only): /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl_displacements.csv
+DEL postprocess M2: extent polish, then integer trim legalization
+DEL postprocess M2: conflicts=0 (A=0 B=0 C=0) components=2 nonoptimal_components=0 polish_optimal=true elapsed=0.006s polish_worker_seconds=0.001 legalize_worker_seconds=0.008
+DEL postprocess CSVs: *_postprocess.csv, *_postprocess_displacements.csv, *_conflicts.csv (report prefix: /home/karl/Documents/OpenROAD-flow-scripts/tools/OpenROAD/test/results/gui_postprocess-tcl.csv)
+DEL final trim conflicts=0 (A=0 B=0 C=0); below_5nm=0 (still conflicts); extent=0.015174 -> 0.015174 -> 0.060000um (continuous -> polish -> legalized); nonoptimal_components=0; ODB unchanged
+DEL total timing (ms): layers=1 total=0.334 run=19.073
+pass

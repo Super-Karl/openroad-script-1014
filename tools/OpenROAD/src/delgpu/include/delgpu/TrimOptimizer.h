@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#pragma once
+#include <cstddef>
+#include <memory>
+#include <vector>
+
+namespace delgpu {
+struct OptNode
+{
+  double low, up;
+  int begin, end;
+};
+struct OptEdge
+{
+  int src, dst, type, range_begin, range_end;
+  double initial, threshold;
+};
+struct OptRange
+{
+  double low, high;
+  int has_low, has_high;
+};
+struct TrimStats
+{
+  double energy = 0, rule_energy = 0, extent_dbu = 0;
+  double max_violation_dbu = 0, max_step_dbu = 0;
+  unsigned long long violations[3]{}, remaining[3]{};
+  unsigned long long moved = 0, repaired = 0;
+  int candidates = 0;
+  bool accepted = false;
+};
+// Numeric arrays only; OpenDB and GUI stay in the host adapter.
+class TrimOptimizer
+{
+ public:
+  TrimOptimizer(const std::vector<OptNode>& nodes,
+                const std::vector<OptEdge>& edges,
+                const std::vector<OptRange>& ranges,
+                const std::vector<int>& incident,
+                const std::vector<int>& colored_edges,
+                const std::vector<int>& color_offsets,
+                double width,
+                double tolerance_dbu,
+                double max_step,
+                double jump_offset_w);
+  ~TrimOptimizer();
+  TrimOptimizer(const TrimOptimizer&) = delete;
+  TrimOptimizer& operator=(const TrimOptimizer&) = delete;
+  TrimStats evaluate(double lambda);
+  TrimStats step(double lambda);
+  TrimStats restoreBest(double lambda);
+  std::vector<double> displacementDbu();
+  size_t deviceBytes() const;
+
+ private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
+}  // namespace delgpu

@@ -17,6 +17,8 @@ usage() {
   build          编译 CUDA delgpu 共享库和支持 GUI 的 OpenROAD 主程序
   build-delgpu   只编译 delgpu 共享库（首次使用请先 build）
   gui            启动 GUI，默认加载 asap7/ibex/base/5_2_route.odb
+  graph          加载设计并建图，默认无界面；--gui 1 显示 trim 和边
+  optimize       建图并迭代优化，默认 200 轮、0.25W 步长、35nm 跳跃、无 GUI
   run            启动 Tcl 终端，或传入 OpenROAD 参数运行脚本
   help           显示帮助
 
@@ -27,6 +29,11 @@ usage() {
   ./dev-openroad.sh gui
   ./dev-openroad.sh gui --db /路径/design.odb
   ./dev-openroad.sh gui --empty
+  ./dev-openroad.sh graph --gui 1 --verify 1
+  ./dev-openroad.sh graph --gui 0
+  ./dev-openroad.sh graph --gui 0 --backend cpu
+  ./dev-openroad.sh optimize --gui 0 --iterations 200 --report /tmp/delgpu.csv
+  ./dev-openroad.sh optimize --gui 1 --frame-ms 100
   ./dev-openroad.sh run -exit tools/OpenROAD/src/delgpu/scripts/open_route.tcl
 
 build/build-delgpu 的参数直接传给模块构建脚本；支持 --cpu。
@@ -35,7 +42,10 @@ build/build-delgpu 的参数直接传给模块构建脚本；支持 --cpu。
 BAZEL 指定 Bazel 程序，OPENROAD_CUDA_PATH 或 CUDA_HOME 指定 CUDA 路径。
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
-在 GUI 的 Tcl Console 中输入 delgpu 即可调用模块（无参数）。
+graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
+optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--frame-ms 刷新间隔、--report CSV。
+在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
+使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
 HELP
 }
@@ -65,10 +75,56 @@ case "$command_name" in
     build_jobs=$(nproc)
     exec bash "$build_script" "${build_args[@]}" -- --//:platform=gui "--jobs=$build_jobs" "$@"
     ;;
-  gui|run)
+  gui|run|graph|optimize)
     [[ -x "$openroad_bin" ]] || fail "找不到 OpenROAD 可执行文件，请先运行 $orfs_root/dev-openroad.sh build"
     if [[ "$command_name" == run ]]; then
       exec "$openroad_bin" -no_init "$@"
+    fi
+    if [[ "$command_name" == graph || "$command_name" == optimize ]]; then
+      graph_db=${DELGPU_ROUTE_DB:-$default_db}
+      graph_gui=0
+      graph_verify=0
+      graph_backend=gpu
+      graph_iterations=0
+      if [[ "$command_name" == optimize ]]; then graph_iterations=200; fi
+      graph_max_step=0.25
+      graph_jump_offset_nm=35
+      graph_frame_ms=100
+      graph_report=
+      while (($#)); do
+        case "$1" in
+          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--frame-ms|--report)
+            (($# >= 2)) || fail "$1 后需要提供值"
+            case "$1" in
+              --db) graph_db=$2 ;;
+              --gui) graph_gui=$2 ;;
+              --verify) graph_verify=$2 ;;
+              --backend) graph_backend=$2 ;;
+              --iterations) graph_iterations=$2 ;;
+              --max-step) graph_max_step=$2 ;;
+              --jump-offset-nm) graph_jump_offset_nm=$2 ;;
+              --frame-ms) graph_frame_ms=$2 ;;
+              --report) graph_report=$2 ;;
+            esac
+            shift 2
+            ;;
+          -h|--help) usage; exit 0 ;;
+          *) fail "未知 $command_name 选项：$1" ;;
+        esac
+      done
+      [[ "$graph_gui" == 0 || "$graph_gui" == 1 ]] || fail "--gui 必须为 0 或 1"
+      [[ "$graph_verify" == 0 || "$graph_verify" == 1 ]] || fail "--verify 必须为 0 或 1"
+      [[ "$graph_backend" == gpu || "$graph_backend" == cpu ]] || fail "--backend 必须为 gpu 或 cpu"
+      [[ "$graph_verify" != 1 || "$graph_backend" == gpu ]] || fail "--verify 1 需要 --backend gpu"
+      [[ -f "$graph_db" ]] || fail "找不到 ODB：$graph_db"
+      export DELGPU_ROUTE_DB="$graph_db" DELGPU_GUI="$graph_gui"
+      export DELGPU_VERIFY="$graph_verify" DELGPU_BACKEND="$graph_backend"
+      export DELGPU_ITERATIONS="$graph_iterations" DELGPU_MAX_STEP="$graph_max_step"
+      export DELGPU_JUMP_OFFSET_NM="$graph_jump_offset_nm"
+      export DELGPU_FRAME_MS="$graph_frame_ms" DELGPU_REPORT="$graph_report"
+      launch_args=(-no_init -no_splash)
+      if [[ "$graph_gui" == 1 ]]; then launch_args+=(-gui); else launch_args+=(-exit); fi
+      exec "$openroad_bin" "${launch_args[@]}" "$openroad_root/src/delgpu/scripts/open_route.tcl"
     fi
     route_db=${DELGPU_ROUTE_DB:-$default_db}
     gui_args=()

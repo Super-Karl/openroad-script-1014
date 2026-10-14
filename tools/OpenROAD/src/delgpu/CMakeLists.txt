@@ -36,7 +36,7 @@ set_target_properties(delgpu_lib PROPERTIES
 )
 
 if(ENABLE_DELGPU_CUDA)
-  target_sources(delgpu_lib PRIVATE src/Gpu.cu)
+  target_sources(delgpu_lib PRIVATE src/Gpu.cu src/graph/GraphCuda.cu src/optimize/TrimOptimizer.cu)
   target_link_libraries(delgpu_lib PRIVATE CUDA::cudart_static)
   # Inherited OpenROAD warning options target the host C++ compiler, not nvcc.
   get_target_property(DELGPU_HOST_OPTIONS delgpu_lib COMPILE_OPTIONS)
@@ -45,7 +45,7 @@ if(ENABLE_DELGPU_CUDA)
       "$<$<COMPILE_LANGUAGE:CXX>:${DELGPU_HOST_OPTIONS}>")
   endif()
 else()
-  target_sources(delgpu_lib PRIVATE src/GpuUnavailable.cpp)
+  target_sources(delgpu_lib PRIVATE src/GpuUnavailable.cpp src/graph/GraphCudaUnavailable.cpp src/optimize/TrimOptimizerUnavailable.cpp)
 endif()
 
 if(NOT DELGPU_STANDALONE)
@@ -56,13 +56,16 @@ if(NOT DELGPU_STANDALONE)
            SWIG_INCLUDES ${OPENROAD_HOME}/src
            SCRIPTS   src/delgpu.tcl
   )
-  target_sources(delgpu PRIVATE src/MakeDelGpu.cpp src/DelGpu.cpp)
+  target_sources(delgpu PRIVATE src/MakeDelGpu.cpp src/DelGpu.cpp src/GraphGraphics.cpp
+    src/graph/BuildGraph.cpp src/graph/TrimGeometry.cpp src/graph/Vnodes.cpp
+    src/graph/Domains.cpp src/graph/Arcs.cpp src/graph/GraphGpu.cpp src/optimize/GpuAdapter.cpp src/optimize/RunOptimization.cpp
+    src/optimize/Optimizer.cpp src/optimize/StallRepair.cpp)
   target_include_directories(delgpu
     PUBLIC include
     PRIVATE ${ODB_HOME}/include
   )
   target_link_libraries(delgpu PRIVATE
-    ${TCL_LIBRARY} delgpu_lib utl_lib
+    ${TCL_LIBRARY} delgpu_lib utl_lib gui_core
     INTERFACE odb)
   # Keep the implementation and embedded Tcl together so only this library
   # needs rebuilding during development. OpenROAD exports the host symbols
@@ -76,4 +79,7 @@ if(NOT DELGPU_STANDALONE)
     target_link_options(delgpu PRIVATE "LINKER:-undefined,dynamic_lookup")
   endif()
   install(TARGETS delgpu LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+  if(ENABLE_TESTS AND ENABLE_DELGPU_CUDA)
+    add_subdirectory(test)
+  endif()
 endif()

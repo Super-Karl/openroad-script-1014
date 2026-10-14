@@ -13,4 +13,10 @@ if {![file isfile $delgpu_route_db]} {
 }
 puts "DELGPU read design: $delgpu_route_db"
 read_db $delgpu_route_db
-delgpu
+set delgpu_options [list -max_iterations 0]
+foreach {env_key option} {DELGPU_GUI -gui DELGPU_VERIFY -verify DELGPU_BACKEND -backend DELGPU_ITERATIONS -max_iterations DELGPU_MAX_STEP -max_step DELGPU_JUMP_OFFSET_NM -jump_offset_nm DELGPU_FRAME_MS -frame_ms DELGPU_REPORT -report} {
+  if {[info exists ::env($env_key)]} {
+    lappend delgpu_options $option $::env($env_key)
+  }
+}
+delgpu {*}$delgpu_options

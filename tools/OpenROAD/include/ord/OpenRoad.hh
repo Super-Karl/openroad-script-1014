@@ -71,6 +71,12 @@ namespace exa {
 class Example;
 }
 
+#ifdef ENABLE_DEL
+namespace del {
+class Del;
+}
+#endif
+
 #ifdef ENABLE_DELGPU
 namespace delgpu {
 class DelGpu;
@@ -181,6 +187,9 @@ class OpenRoad
   tap::Tapcell* getTapcell() { return tapcell_; }
   mpl::MacroPlacer* getMacroPlacer() { return macro_placer_; }
   exa::Example* getExample() { return example_; }
+#ifdef ENABLE_DEL
+  del::Del* getDel() { return del_; }
+#endif
 #ifdef ENABLE_DELGPU
   delgpu::DelGpu* getDelGpu() { return delgpu_; }
 #endif
@@ -291,6 +300,9 @@ class OpenRoad
   ram::RamGen* ram_gen_ = nullptr;
   mpl::MacroPlacer* macro_placer_ = nullptr;
   exa::Example* example_ = nullptr;
+#ifdef ENABLE_DEL
+  del::Del* del_ = nullptr;
+#endif
 #ifdef ENABLE_DELGPU
   delgpu::DelGpu* delgpu_ = nullptr;
 #endif
