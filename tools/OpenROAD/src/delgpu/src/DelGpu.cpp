@@ -30,14 +30,15 @@ void DelGpu::run(bool gui,
                  double max_step,
                  double jump_offset_nm,
                  int frame_ms,
-                 const char* report)
+                 const char* report,
+                 int max_backtracks)
 {
   if (running_) {
     throw std::runtime_error("DELGPU is already running");
   }
   if (iterations < 0 || frame_ms < 0 || !std::isfinite(max_step)
-      || max_step <= 0 || !std::isfinite(jump_offset_nm)
-      || jump_offset_nm <= 0) {
+      || max_step <= 0 || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
+      || max_backtracks < 0 || max_backtracks > 19) {
     throw std::invalid_argument("Invalid DELGPU iteration parameters");
   }
   struct RunningGuard
@@ -55,12 +56,13 @@ void DelGpu::run(bool gui,
   }
   logger_->report(
       "DELGPU parameters: backend={} gui={} max_iterations={} max_step={}W "
-      "jump_offset_nm={}",
+      "jump_offset_nm={} max_backtracks={}",
       gpu ? "gpu" : "cpu",
       gui,
       iterations,
       max_step,
-      jump_offset_nm);
+      jump_offset_nm,
+      gpu ? max_backtracks : 19);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -136,6 +138,7 @@ void DelGpu::run(bool gui,
                     jump_offset_nm,
                     frame_ms,
                     report == nullptr ? "" : report,
+                    max_backtracks,
                     logger_);
   }
 }

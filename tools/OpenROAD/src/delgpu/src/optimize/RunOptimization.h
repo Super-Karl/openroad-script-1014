@@ -19,5 +19,6 @@ void runOptimization(odb::dbBlock* block,
                      double jump_offset_nm,
                      int frame_ms,
                      const std::string& report,
+                     int max_backtracks,
                      utl::Logger* logger);
 }

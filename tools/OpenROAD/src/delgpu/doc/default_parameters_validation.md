@@ -1,5 +1,8 @@
 # 默认参数 200 / 0.25W / 35nm 验证
 
+这是旧投影修复版本的历史记录。当前 CPU 跳跃规则及默认无回溯的结果见
+[跳跃与回溯实验](cpu_jump_validation.md)。
+
 日期：2026-10-14。输入仍为 asap7/ibex/base/5_2_route.odb，M2–M7。
 应用默认值位于 `include/delgpu/Parameters.h`，Tcl 命令和启动脚本同步更新。
 CPU 是 DEL 连续迭代参考后端，直接接收 max_step=0.25、jump_offset_nm=35。
@@ -30,6 +33,9 @@ max_iterations=200、max_step=0.25W、jump_offset_nm=35。
 
 当前方法比较约 4.01 倍加速，GPU 总冲突比 CPU 少 48.63%。
 CPU 的 >=5nm 残差更少，两个质量指标存在取舍。
+以上质量数字来自历史最佳快照。统一比较连续第 200 轮末态时，CPU 的 >=5nm
+数量为 **90**，GPU 为 **916**；停滞修复语义差异及控制实验见
+[第 200 轮差距诊断](iteration200_diagnosis.md)。
 计时包含优化初始化、迭代、最佳快照恢复、最终下载和主机检查，排除读库、建图、
 CUDA 上下文初始化和 LP/MIP 后处理。总冲突阈值为 1e-6 DBU，结果不是实际布线 DRC。
 

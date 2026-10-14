@@ -12,10 +12,12 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>&,
                              const std::vector<int>&,
                              const std::vector<int>&,
                              const std::vector<int>&,
+                             const std::vector<int>&,
                              double,
                              double,
                              double,
-                             double)
+                             double,
+                             int)
 {
   throw std::runtime_error("GPU iteration backend was not compiled");
 }
@@ -25,10 +27,6 @@ TrimStats TrimOptimizer::evaluate(double)
   throw std::runtime_error("CUDA unavailable");
 }
 TrimStats TrimOptimizer::step(double)
-{
-  throw std::runtime_error("CUDA unavailable");
-}
-TrimStats TrimOptimizer::restoreBest(double)
 {
   throw std::runtime_error("CUDA unavailable");
 }

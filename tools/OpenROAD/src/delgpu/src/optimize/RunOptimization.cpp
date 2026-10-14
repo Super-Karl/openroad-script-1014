@@ -52,6 +52,7 @@ void runOptimization(odb::dbBlock* block,
                      double jump_offset_nm,
                      int frame_ms,
                      const std::string& report,
+                     int max_backtracks,
                      utl::Logger* logger)
 {
   using Clock = std::chrono::steady_clock;
@@ -91,6 +92,8 @@ void runOptimization(odb::dbBlock* block,
   unsigned long long initial_total = 0, final_total = 0, remaining_total = 0,
                      total_candidates = 0, total_repairs = 0;
   size_t snapshot_bytes = 0;
+  double total_extent_dbu = 0, total_wire_extension_dbu = 0;
+  double iteration_ms = 0;
   for (size_t layer_id = 0; layer_id < layers.size(); ++layer_id) {
     const auto& layer = layers[layer_id];
     if (layer.nodes.empty()) {
@@ -104,7 +107,8 @@ void runOptimization(odb::dbBlock* block,
                                 tolerance,
                                 max_step,
                                 block->getDbUnitsPerMicron(),
-                                jump_offset_nm);
+                                jump_offset_nm,
+                                max_backtracks);
     } else {
       cpu = std::make_unique<LayerOptimizer>(layer,
                                              tolerance,
@@ -117,12 +121,6 @@ void runOptimization(odb::dbBlock* block,
     const auto initial_count = count(stats);
     initial_total += initial_count;
     write(layer.layer, "initial", 0, 10, stats);
-    auto best_cpu = stats;
-    double best_cpu_lambda = 10;
-    std::vector<double> best_cpu_positions;
-    if (!gpu) {
-      best_cpu_positions = cpu->displacementDbu();
-    }
     auto last_frame = Clock::now();
     int completed = 0;
     double lambda = 10;
@@ -134,14 +132,6 @@ void runOptimization(odb::dbBlock* block,
       total_candidates += stats.candidates;
       total_repairs += stats.repaired;
       write(layer.layer, "iteration", iteration, lambda, stats);
-      if (!gpu
-          && (count(stats) < count(best_cpu)
-              || (count(stats) == count(best_cpu)
-                  && stats.max_violation_dbu < best_cpu.max_violation_dbu))) {
-        best_cpu = stats;
-        best_cpu_lambda = lambda;
-        best_cpu_positions = cpu->displacementDbu();
-      }
       if (iteration % 25 == 0 || count(stats) == 0 || iteration == iterations) {
         logger->report(
             "DELGPU iteration: layer={} iter={} lambda={} conflicts={} "
@@ -174,14 +164,12 @@ void runOptimization(odb::dbBlock* block,
         last_frame = Clock::now();
       }
     }
-    if (gpu) {
-      stats = device->restoreBest(lambda);
-    } else {
-      stats = best_cpu;
-      stats.energy += (lambda - best_cpu_lambda) * stats.rule_energy;
-    }
+    const auto iterated = Clock::now();
+    iteration_ms
+        += std::chrono::duration<double, std::milli>(iterated - ready).count();
+    // Keep the last iteration, matching native DEL's continuous-stage result.
     auto final_positions
-        = gpu ? device->displacementDbu() : std::move(best_cpu_positions);
+        = gpu ? device->displacementDbu() : cpu->displacementDbu();
     if (gpu) {
       snapshot_bytes += final_positions.size() * sizeof(double);
     }
@@ -206,9 +194,16 @@ void runOptimization(odb::dbBlock* block,
     }
     stats.max_violation_dbu = assessed.max_violation_dbu;
     stats.extent_dbu = assessed.extent_dbu;
+    double wire_extension_dbu = 0;
+    for (size_t i = 0; i < final_positions.size(); ++i) {
+      wire_extension_dbu
+          += layer.nodes[i].high_end ? final_positions[i] : -final_positions[i];
+    }
+    total_extent_dbu += stats.extent_dbu;
+    total_wire_extension_dbu += wire_extension_dbu;
     final_total += count(stats);
     remaining_total += remaining(stats);
-    write(layer.layer, "best", completed, lambda, stats);
+    write(layer.layer, "final", completed, lambda, stats);
     if (gui) {
       updateGraphGraphics(layer_id, std::move(final_positions));
     }
@@ -216,21 +211,26 @@ void runOptimization(odb::dbBlock* block,
     logger->report(
         "DELGPU optimization: layer={} iterations={} initial_conflicts={} "
         "final_conflicts={} remaining_5nm={} max_gap_dbu={:.6f} "
-        "setup_ms={:.3f} iterate_ms={:.3f} device_mib={:.2f}",
+        "extent_um={:.6f} wire_extension_um={:.6f} "
+        "setup_ms={:.3f} iterate_ms={:.3f} check_ms={:.3f} device_mib={:.2f}",
         layer.layer,
         completed,
         initial_count,
         count(stats),
         remaining(stats),
         stats.max_violation_dbu,
+        stats.extent_dbu / block->getDbUnitsPerMicron(),
+        wire_extension_dbu / block->getDbUnitsPerMicron(),
         std::chrono::duration<double, std::milli>(ready - start).count(),
-        std::chrono::duration<double, std::milli>(end - ready).count(),
+        std::chrono::duration<double, std::milli>(iterated - ready).count(),
+        std::chrono::duration<double, std::milli>(end - iterated).count(),
         gpu ? device->deviceBytes() / (1024.0 * 1024.0) : 0.0);
   }
   logger->report(
       "DELGPU optimization complete: backend={} gui={} initial_conflicts={} "
       "final_conflicts={} remaining_5nm={} candidates={} repairs={} "
-      "coordinate_download_bytes={} total_ms={:.3f}",
+      "extent_um={:.6f} wire_extension_um={:.6f} "
+      "coordinate_download_bytes={} iteration_ms={:.3f} total_ms={:.3f}",
       gpu ? "gpu" : "cpu",
       gui,
       initial_total,
@@ -238,7 +238,10 @@ void runOptimization(odb::dbBlock* block,
       remaining_total,
       total_candidates,
       total_repairs,
+      total_extent_dbu / block->getDbUnitsPerMicron(),
+      total_wire_extension_dbu / block->getDbUnitsPerMicron(),
       snapshot_bytes,
+      iteration_ms,
       std::chrono::duration<double, std::milli>(Clock::now() - begin).count());
 }
 }  // namespace delgpu

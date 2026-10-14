@@ -37,18 +37,19 @@ class TrimOptimizer
                 const std::vector<OptEdge>& edges,
                 const std::vector<OptRange>& ranges,
                 const std::vector<int>& incident,
-                const std::vector<int>& colored_edges,
-                const std::vector<int>& color_offsets,
+                const std::vector<int>& component_edges,
+                const std::vector<int>& component_offsets,
+                const std::vector<int>& edge_components,
                 double width,
                 double tolerance_dbu,
                 double max_step,
-                double jump_offset_w);
+                double jump_offset_w,
+                int max_backtracks);
   ~TrimOptimizer();
   TrimOptimizer(const TrimOptimizer&) = delete;
   TrimOptimizer& operator=(const TrimOptimizer&) = delete;
   TrimStats evaluate(double lambda);
   TrimStats step(double lambda);
-  TrimStats restoreBest(double lambda);
   std::vector<double> displacementDbu();
   size_t deviceBytes() const;
 

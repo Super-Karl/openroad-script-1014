@@ -9,7 +9,9 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
                                                 double max_step,
                                                 double dbu_per_micron = 1000.0,
                                                 double jump_offset_nm
-                                                = kDefaultJumpOffsetNm);
+                                                = kDefaultJumpOffsetNm,
+                                                int max_backtracks
+                                                = kDefaultMaxBacktracks);
 // Recompute final quality and assert hard domains on the host snapshot.
 TrimStats assessDisplacement(const LayerNodes& layer,
                              const std::vector<double>& displacement,

@@ -43,7 +43,7 @@ BAZEL 指定 Bazel 程序，OPENROAD_CUDA_PATH 或 CUDA_HOME 指定 CUDA 路径�
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
-optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--frame-ms 刷新间隔、--report CSV。
+optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--max-backtracks 回溯重试次数（默认 0）、--frame-ms 刷新间隔、--report CSV。
 在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
 使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
@@ -89,11 +89,12 @@ case "$command_name" in
       if [[ "$command_name" == optimize ]]; then graph_iterations=200; fi
       graph_max_step=0.25
       graph_jump_offset_nm=35
+      graph_max_backtracks=
       graph_frame_ms=100
       graph_report=
       while (($#)); do
         case "$1" in
-          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--frame-ms|--report)
+          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--frame-ms|--report)
             (($# >= 2)) || fail "$1 后需要提供值"
             case "$1" in
               --db) graph_db=$2 ;;
@@ -103,6 +104,7 @@ case "$command_name" in
               --iterations) graph_iterations=$2 ;;
               --max-step) graph_max_step=$2 ;;
               --jump-offset-nm) graph_jump_offset_nm=$2 ;;
+              --max-backtracks) graph_max_backtracks=$2 ;;
               --frame-ms) graph_frame_ms=$2 ;;
               --report) graph_report=$2 ;;
             esac
@@ -121,6 +123,9 @@ case "$command_name" in
       export DELGPU_VERIFY="$graph_verify" DELGPU_BACKEND="$graph_backend"
       export DELGPU_ITERATIONS="$graph_iterations" DELGPU_MAX_STEP="$graph_max_step"
       export DELGPU_JUMP_OFFSET_NM="$graph_jump_offset_nm"
+      if [[ -n "$graph_max_backtracks" ]]; then
+        export DELGPU_MAX_BACKTRACKS="$graph_max_backtracks"
+      fi
       export DELGPU_FRAME_MS="$graph_frame_ms" DELGPU_REPORT="$graph_report"
       launch_args=(-no_init -no_splash)
       if [[ "$graph_gui" == 1 ]]; then launch_args+=(-gui); else launch_args+=(-exit); fi

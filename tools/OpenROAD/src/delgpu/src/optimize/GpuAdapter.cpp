@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 
 #include "delgpu/GpuOptimizer.h"
@@ -10,7 +11,8 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
                                                 double tolerance_dbu,
                                                 double max_step,
                                                 double dbu_per_micron,
-                                                double jump_offset_nm)
+                                                double jump_offset_nm,
+                                                int max_backtracks)
 {
   const double width = layer.rules.width;
   if (!std::isfinite(dbu_per_micron) || dbu_per_micron <= 0
@@ -67,38 +69,47 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
     incident.insert(incident.end(), adjacency[i].begin(), adjacency[i].end());
     nodes.push_back({low, up, begin, static_cast<int>(incident.size())});
   }
-  // Each color is a matching: its edges never write a shared endpoint.
-  std::vector<int> colors(edges.size(), -1), marks(1, -1);
-  int color_count = 0;
-  for (size_t i = 0; i < edges.size(); ++i) {
-    for (int node : {edges[i].src, edges[i].dst}) {
-      for (int other : adjacency[node]) {
-        if (colors[other] >= 0) {
-          marks[colors[other]] = static_cast<int>(i);
-        }
+  // Independent components share no nodes. Keep the original edge order
+  // within each component so jumps and immediate CSR resets match CPU DEL.
+  std::vector<int> parent(nodes.size()), sizes(nodes.size(), 1);
+  std::iota(parent.begin(), parent.end(), 0);
+  const auto root = [&](int node) {
+    while (parent[node] != node) {
+      parent[node] = parent[parent[node]];
+      node = parent[node];
+    }
+    return node;
+  };
+  for (const auto& edge : edges) {
+    int a = root(edge.src), b = root(edge.dst);
+    if (a != b) {
+      if (sizes[a] < sizes[b]) {
+        std::swap(a, b);
       }
+      parent[b] = a;
+      sizes[a] += sizes[b];
     }
-    int color = 0;
-    while (color < color_count && marks[color] == static_cast<int>(i)) {
-      ++color;
-    }
-    if (color == color_count) {
-      ++color_count;
-      marks.resize(color_count, -1);
-    }
-    colors[i] = color;
   }
-  std::vector<int> offsets(color_count + 1, 0);
-  for (int color : colors) {
-    ++offsets[color + 1];
+  std::vector<int> labels(nodes.size(), -1), edge_components(edges.size());
+  int component_count = 0;
+  for (size_t i = 0; i < edges.size(); ++i) {
+    const int r = root(edges[i].src);
+    if (labels[r] < 0) {
+      labels[r] = component_count++;
+    }
+    edge_components[i] = labels[r];
   }
-  for (int i = 0; i < color_count; ++i) {
+  std::vector<int> offsets(component_count + 1, 0);
+  for (int component : edge_components) {
+    ++offsets[component + 1];
+  }
+  for (int i = 0; i < component_count; ++i) {
     offsets[i + 1] += offsets[i];
   }
   auto cursor = offsets;
   std::vector<int> order(edges.size());
   for (size_t i = 0; i < edges.size(); ++i) {
-    order[cursor[colors[i]]++] = static_cast<int>(i);
+    order[cursor[edge_components[i]]++] = static_cast<int>(i);
   }
   return std::make_unique<TrimOptimizer>(
       nodes,
@@ -107,10 +118,12 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
       incident,
       order,
       offsets,
+      edge_components,
       width,
       tolerance_dbu,
       max_step,
-      jump_offset_nm * dbu_per_micron / (1000.0 * width));
+      jump_offset_nm * dbu_per_micron / (1000.0 * width),
+      max_backtracks);
 }
 
 TrimStats assessDisplacement(const LayerNodes& layer,
@@ -158,7 +171,7 @@ TrimStats assessDisplacement(const LayerNodes& layer,
     gap *= width;
     if (gap > epsilon) {
       ++stats.violations[static_cast<int>(arc.type)];
-      if (gap + epsilon >= tolerance_dbu) {
+      if (gap >= tolerance_dbu) {
         ++stats.remaining[static_cast<int>(arc.type)];
       }
       stats.max_violation_dbu = std::max(stats.max_violation_dbu, gap);

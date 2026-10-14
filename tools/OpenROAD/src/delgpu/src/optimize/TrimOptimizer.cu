@@ -159,7 +159,7 @@ __global__ void potentialKernel(const OptEdge* edges,
     const double gap = residual(e, ranges, d) * width;
     if (gap > numerical_dbu) {
       a.violations[e.type] = 1;
-      a.remaining[e.type] = gap + numerical_dbu >= tolerance;
+      a.remaining[e.type] = gap >= tolerance;
       a.gap = gap;
     }
     a.repaired = repaired[i];
@@ -245,7 +245,10 @@ __global__ void stallKernel(const OptEdge* edges,
                             const double* prev,
                             const double* x,
                             int* stalled,
-                            double width)
+                            double width,
+                            double tolerance,
+                            const int* edge_components,
+                            int* active)
 {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= ne) {
@@ -256,143 +259,109 @@ __global__ void stallKernel(const OptEdge* edges,
       = llround(width * x[e.src]) != llround(width * prev[e.src])
         || llround(width * x[e.dst]) != llround(width * prev[e.dst]);
   const bool violated
-      = residual(e, ranges, edgeDistance(e, x)) * width > numerical_dbu
-        && residual(e, ranges, edgeDistance(e, prev)) * width > numerical_dbu;
+      = residual(e, ranges, edgeDistance(e, x)) * width >= tolerance
+        && residual(e, ranges, edgeDistance(e, prev)) * width >= tolerance;
   stalled[i] = moved || !violated ? 0 : (stalled[i] < 3 ? stalled[i] + 1 : 3);
+  if (stalled[i] >= 3) {
+    atomicExch(active + edge_components[i], 1);
+  }
 }
-// A matching owns each endpoint once. Colors execute in stream order.
-// Project stalled pairs to their nearest feasible legal interval; unlike the
-// CPU barrier jump, this can repair A arcs and tiny residuals directly.
-__global__ void repairKernel(const OptNode* nodes,
-                             const OptEdge* edges,
-                             const OptRange* ranges,
-                             const int* colored,
-                             int count,
-                             double* x,
-                             const int* stalled,
-                             int* touched,
-                             int* repaired,
-                             double width,
-                             double jump_offset)
+// The CPU barrier jump, including joint feasibility and degree-weighted
+// endpoint movement. A and negative-distance B have no barrier to cross.
+__device__ bool jumpAcrossBarrier(const OptNode* nodes,
+                                  const OptEdge& e,
+                                  double* x,
+                                  double jump_offset)
 {
-  const int k = blockIdx.x * blockDim.x + threadIdx.x;
-  if (k >= count) {
-    return;
-  }
-  const int id = colored[k];
-  if (stalled[id] < 3) {
-    return;
-  }
-  const auto e = edges[id];
   const double d = edgeDistance(e, x);
-  if (residual(e, ranges, d) * width <= numerical_dbu) {
-    return;
+  double midpoint;
+  if (e.type == 1 && d > 0 && d < e.threshold) {
+    midpoint = e.threshold / 2;
+  } else if (e.type == 2 && d != 0 && fabs(d) < e.threshold) {
+    midpoint = copysign(e.threshold / 2, d);
+  } else {
+    return false;
   }
-  const double old_s = x[e.src], old_t = x[e.dst];
+  const double first_side = d <= midpoint ? 1 : -1;
+  const int attempts = d == midpoint ? 2 : 1;
   const auto s = nodes[e.src], t = nodes[e.dst];
-  double best_s = old_s, best_t = old_t, best_cost = INFINITY;
-  for (int j = e.range_begin; j < e.range_end; ++j) {
-    const auto r = ranges[j];
-    double target = d;
-    if (r.has_low) {
-      target = fmax(target, r.low);
-    }
-    if (r.has_high) {
-      target = fmin(target, r.high);
-    }
-    const double change = target - d, sign = change >= 0 ? 1 : -1,
-                 total = fabs(change);
+  const double old_s = x[e.src], old_t = x[e.dst];
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    const double side = attempt == 0 ? first_side : -first_side;
+    const double target = midpoint + side * jump_offset;
+    const double change = target - d, sign = change > 0 ? 1 : -1;
+    const double total = fabs(change);
     const double cs = sign > 0 ? old_s - s.low : s.up - old_s;
     const double ct = sign > 0 ? t.up - old_t : old_t - t.low;
     const double low = fmax(0.0, total - ct), high = fmin(total, cs);
-    const double eps = 1e-12 * fmax(1.0, total);
-    if (low > high + eps) {
+    const double roundoff
+        = 16 * std::numeric_limits<double>::epsilon()
+          * fmax(
+              1.0,
+              fmax(total,
+                   fmax(fabs(d),
+                        fmax(fabs(target), fmax(fabs(old_s), fabs(old_t))))));
+    if (low > high + roundoff) {
       continue;
     }
     const double qs = 1 + s.end - s.begin, qt = 1 + t.end - t.begin;
-    const double share = clamp(total * qt / (qs + qt), fmin(low, high), high);
+    const double preferred = total * (qt / (qs + qt));
+    const double share = low > high ? high : clamp(preferred, low, high);
     const double ns = clamp(old_s - sign * share, s.low, s.up);
     const double nd = clamp(old_t + sign * (total - share), t.low, t.up);
     const double after = e.initial + nd - ns;
-    if (!isfinite(ns) || !isfinite(nd)
-        || residual(e, ranges, after) * width > numerical_dbu) {
+    if (!isfinite(ns) || !isfinite(nd) || (after - midpoint) * side <= 0
+        || fabs(after - target) > roundoff) {
       continue;
     }
-    const double cost
-        = qs * (ns - old_s) * (ns - old_s) + qt * (nd - old_t) * (nd - old_t);
-    if (cost < best_cost) {
-      best_cost = cost;
-      best_s = ns;
-      best_t = nd;
-    }
+    x[e.src] = ns;
+    x[e.dst] = nd;
+    return true;
   }
-  // If no legal pair position is reachable, use the requested offset to
-  // cross a B/C potential peak. Domains remain hard bounds. Best-so-far
-  // quality retention protects against a worse final conflict count.
-  if (!isfinite(best_cost)
-      && ((e.type == 1 && d > 0 && d < e.threshold)
-          || (e.type == 2 && d != 0 && fabs(d) < e.threshold))) {
-    const double midpoint
-        = e.type == 1 ? e.threshold / 2 : copysign(e.threshold / 2, d);
-    const double first_side = d <= midpoint ? 1 : -1;
-    const int attempts = d == midpoint ? 2 : 1;
-    for (int attempt = 0; attempt < attempts; ++attempt) {
-      const double side = attempt == 0 ? first_side : -first_side;
-      const double target = midpoint + side * jump_offset;
-      const double change = target - d;
-      const double sign = change > 0 ? 1 : -1;
-      const double total = fabs(change);
-      const double cs = sign > 0 ? old_s - s.low : s.up - old_s;
-      const double ct = sign > 0 ? t.up - old_t : old_t - t.low;
-      const double low = fmax(0.0, total - ct), high = fmin(total, cs);
-      const double eps = 1e-12 * fmax(1.0, fmax(total, fabs(target)));
-      if (low > high + eps) {
-        continue;
-      }
-      const double qs = 1 + s.end - s.begin, qt = 1 + t.end - t.begin;
-      const double share = clamp(total * qt / (qs + qt), fmin(low, high), high);
-      const double ns = clamp(old_s - sign * share, s.low, s.up);
-      const double nd = clamp(old_t + sign * (total - share), t.low, t.up);
-      const double after = e.initial + nd - ns;
-      if (!isfinite(ns) || !isfinite(nd) || (after - midpoint) * side <= 0
-          || fabs(after - target) > eps) {
-        continue;
-      }
-      best_s = ns;
-      best_t = nd;
-      best_cost = 0;
-      break;
-    }
-  }
-  if (isfinite(best_cost)) {
-    x[e.src] = best_s;
-    x[e.dst] = best_t;
-    if (best_s != old_s) {
-      touched[e.src] = 1;
-    }
-    if (best_t != old_t) {
-      touched[e.dst] = 1;
-    }
-    repaired[id] = 1;
-  }
+  return false;
 }
-__global__ void clearStalls(const OptEdge* edges,
-                            int ne,
-                            const int* touched,
-                            int* stalled)
+// One thread owns a component. Components have disjoint nodes and incident
+// edges, so the canonical scan and immediate resets need no atomics or locks.
+__global__ void repairKernel(const OptNode* nodes,
+                             const OptEdge* edges,
+                             const int* incident,
+                             const int* component_edges,
+                             const int* component_offsets,
+                             int component_count,
+                             const int* active,
+                             double* x,
+                             int* stalled,
+                             int* repaired,
+                             double jump_offset)
 {
-  const int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= ne) {
+  const int component = blockIdx.x * blockDim.x + threadIdx.x;
+  if (component >= component_count || !active[component]) {
     return;
   }
-  const auto e = edges[i];
-  if (touched[e.src] || touched[e.dst]) {
-    stalled[i] = 0;
+  for (int k = component_offsets[component];
+       k < component_offsets[component + 1];
+       ++k) {
+    const int id = component_edges[k];
+    if (stalled[id] < 3) {
+      continue;
+    }
+    const auto e = edges[id];
+    const double old_s = x[e.src], old_t = x[e.dst];
+    if (!jumpAcrossBarrier(nodes, e, x, jump_offset)) {
+      continue;
+    }
+    repaired[id] = 1;
+    if (x[e.src] != old_s) {
+      for (int j = nodes[e.src].begin; j < nodes[e.src].end; ++j) {
+        stalled[incident[j]] = 0;
+      }
+    }
+    if (x[e.dst] != old_t) {
+      for (int j = nodes[e.dst].begin; j < nodes[e.dst].end; ++j) {
+        stalled[incident[j]] = 0;
+      }
+    }
   }
-}
-unsigned long long violationCount(const Aggregate& a)
-{
-  return a.violations[0] + a.violations[1] + a.violations[2];
 }
 TrimStats unpack(const Aggregate& a)
 {
@@ -424,37 +393,42 @@ class TrimOptimizer::Impl
        const std::vector<int>& hi,
        const std::vector<int>& hc,
        const std::vector<int>& offsets,
+       const std::vector<int>& components,
        double w,
        double tol,
        double step,
-       double jump)
+       double jump,
+       int retries)
       : n(static_cast<int>(hn.size())),
         e(static_cast<int>(he.size())),
         width(w),
         tolerance(tol),
         max_step(step),
         jump_offset(jump),
+        max_backtracks(retries),
+        component_count(static_cast<int>(offsets.size()) - 1),
         nodes(hn.size()),
         edges(he.size()),
         ranges(hr.size()),
         incident(hi.size()),
-        colored(hc.size()),
+        component_edges(hc.size()),
+        component_offsets(offsets.size()),
+        edge_components(components.size()),
+        active(component_count),
         positions(hn.size()),
         previous(hn.size()),
         candidate(hn.size()),
-        best(hn.size()),
         direction(hn.size()),
         prime(he.size()),
         stalled(he.size()),
-        touched(hn.size()),
         repaired(he.size()),
         work(hn.size() + he.size()),
         summary(1),
-        old(1),
-        color_offsets(offsets)
+        old(1)
   {
     if (n <= 0 || width <= 0 || !std::isfinite(width) || !std::isfinite(step)
-        || step <= 0 || !std::isfinite(jump) || jump <= 0) {
+        || step <= 0 || !std::isfinite(jump) || jump <= 0 || !std::isfinite(tol)
+        || tol <= 0 || retries < 0 || retries > 19) {
       throw std::invalid_argument("Invalid GPU optimizer parameters");
     }
     for (const auto& node : hn) {
@@ -467,7 +441,9 @@ class TrimOptimizer::Impl
     edges.upload(he);
     ranges.upload(hr);
     incident.upload(hi);
-    colored.upload(hc);
+    component_edges.upload(hc);
+    component_offsets.upload(offsets);
+    edge_components.upload(components);
     check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
       check(cudaMallocHost(reinterpret_cast<void**>(&host), sizeof(Aggregate)));
@@ -488,12 +464,6 @@ class TrimOptimizer::Impl
                                       Aggregate{},
                                       stream));
       temp = std::make_unique<Device<unsigned char>>(temp_size);
-      best_stats = report(10);
-      check(cudaMemcpyAsync(best.get(),
-                            current,
-                            positions.bytes(),
-                            cudaMemcpyDeviceToDevice,
-                            stream));
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       if (host) {
@@ -561,7 +531,6 @@ class TrimOptimizer::Impl
   }
   TrimStats step(double lambda)
   {
-    ++round;
     check(cudaMemcpyAsync(previous.get(),
                           current,
                           positions.bytes(),
@@ -597,9 +566,8 @@ class TrimOptimizer::Impl
     int candidates = 0;
     bool accepted = false;
     for (int attempt = 0; attempt < 3 && !accepted; ++attempt) {
-      // Eight backtracks bound synchronization overhead; best-so-far tracks
-      // quality.
-      for (int backtrack = 0; backtrack < 8; ++backtrack) {
+      // Zero retries evaluates only the initial step for each attempt.
+      for (int backtrack = 0; backtrack <= max_backtracks; ++backtrack) {
         moveKernel<<<blocks(n), block_size, 0, stream>>>(nodes.get(),
                                                          n,
                                                          previous.get(),
@@ -644,73 +612,53 @@ class TrimOptimizer::Impl
     }
     if (e) {
       check(cudaMemsetAsync(repaired.get(), 0, repaired.bytes(), stream));
+      check(cudaMemsetAsync(active.get(), 0, active.bytes(), stream));
       stallKernel<<<blocks(e), block_size, 0, stream>>>(edges.get(),
                                                         e,
                                                         ranges.get(),
                                                         previous.get(),
                                                         current,
                                                         stalled.get(),
-                                                        width);
-      if (round % 3 == 0) {
-        check(cudaMemsetAsync(touched.get(), 0, touched.bytes(), stream));
-        for (size_t c = 0; c + 1 < color_offsets.size(); ++c) {
-          const int count = color_offsets[c + 1] - color_offsets[c];
-          if (count) {
-            repairKernel<<<blocks(count), block_size, 0, stream>>>(
-                nodes.get(),
-                edges.get(),
-                ranges.get(),
-                colored.get() + color_offsets[c],
-                count,
-                current,
-                stalled.get(),
-                touched.get(),
-                repaired.get(),
-                width,
-                jump_offset);
-          }
-        }
-        clearStalls<<<blocks(e), block_size, 0, stream>>>(
-            edges.get(), e, touched.get(), stalled.get());
-      }
+                                                        width,
+                                                        tolerance,
+                                                        edge_components.get(),
+                                                        active.get());
+      repairKernel<<<blocks(component_count), block_size, 0, stream>>>(
+          nodes.get(),
+          edges.get(),
+          incident.get(),
+          component_edges.get(),
+          component_offsets.get(),
+          component_count,
+          active.get(),
+          current,
+          stalled.get(),
+          repaired.get(),
+          jump_offset);
     }
     const Aggregate after = report(lambda);
-    const auto count = violationCount(after),
-               best_count = violationCount(best_stats);
-    if (count < best_count
-        || (count == best_count
-            && (after.gap < best_stats.gap - 1e-9
-                || (std::abs(after.gap - best_stats.gap) <= 1e-9
-                    && after.extent < best_stats.extent)))) {
-      best_stats = after;
-      check(cudaMemcpyAsync(best.get(),
-                            current,
-                            positions.bytes(),
-                            cudaMemcpyDeviceToDevice,
-                            stream));
-    }
     auto stats = unpack(after);
     stats.candidates = candidates;
     stats.accepted = accepted || stats.repaired;
     return stats;
   }
-  int n, e, round = 0;
+  int n, e;
   double width, tolerance, max_step, jump_offset;
+  int max_backtracks, component_count;
   Device<OptNode> nodes;
   Device<OptEdge> edges;
   Device<OptRange> ranges;
-  Device<int> incident, colored;
-  Device<double> positions, previous, candidate, best, direction, prime;
-  Device<int> stalled, touched, repaired;
+  Device<int> incident, component_edges, component_offsets, edge_components,
+      active;
+  Device<double> positions, previous, candidate, direction, prime;
+  Device<int> stalled, repaired;
   Device<Aggregate> work, summary, old;
-  std::vector<int> color_offsets;
   std::unique_ptr<Device<unsigned char>> temp;
   size_t temp_size = 0;
   cudaStream_t stream = nullptr;
   Aggregate* host = nullptr;
   double* current = nullptr;
   double* trial = nullptr;
-  Aggregate best_stats;
 };
 
 TrimOptimizer::TrimOptimizer(const std::vector<OptNode>& n,
@@ -719,11 +667,14 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>& n,
                              const std::vector<int>& i,
                              const std::vector<int>& c,
                              const std::vector<int>& o,
+                             const std::vector<int>& components,
                              double w,
                              double t,
                              double step,
-                             double jump)
-    : impl_(std::make_unique<Impl>(n, e, r, i, c, o, w, t, step, jump))
+                             double jump,
+                             int retries)
+    : impl_(std::make_unique<
+            Impl>(n, e, r, i, c, o, components, w, t, step, jump, retries))
 {
 }
 TrimOptimizer::~TrimOptimizer() = default;
@@ -740,29 +691,6 @@ TrimStats TrimOptimizer::step(double lambda)
     throw std::invalid_argument("Invalid constraint weight");
   }
   return impl_->step(lambda);
-}
-TrimStats TrimOptimizer::restoreBest(double lambda)
-{
-  if (!std::isfinite(lambda) || lambda <= 0) {
-    throw std::invalid_argument("Invalid constraint weight");
-  }
-  check(cudaMemcpyAsync(impl_->current,
-                        impl_->best.get(),
-                        impl_->positions.bytes(),
-                        cudaMemcpyDeviceToDevice,
-                        impl_->stream));
-  if (impl_->e) {
-    check(cudaMemsetAsync(
-        impl_->repaired.get(), 0, impl_->repaired.bytes(), impl_->stream));
-    check(cudaMemsetAsync(
-        impl_->stalled.get(), 0, impl_->stalled.bytes(), impl_->stream));
-  }
-  check(cudaMemcpyAsync(impl_->previous.get(),
-                        impl_->current,
-                        impl_->positions.bytes(),
-                        cudaMemcpyDeviceToDevice,
-                        impl_->stream));
-  return unpack(impl_->report(lambda));
 }
 std::vector<double> TrimOptimizer::displacementDbu()
 {
@@ -782,10 +710,11 @@ size_t TrimOptimizer::deviceBytes() const
 {
   const auto& p = *impl_;
   return p.nodes.bytes() + p.edges.bytes() + p.ranges.bytes()
-         + p.incident.bytes() + p.colored.bytes() + p.positions.bytes()
-         + p.previous.bytes() + p.candidate.bytes() + p.best.bytes()
-         + p.direction.bytes() + p.prime.bytes() + p.stalled.bytes()
-         + p.touched.bytes() + p.repaired.bytes() + p.work.bytes()
+         + p.incident.bytes() + p.component_edges.bytes()
+         + p.component_offsets.bytes() + p.edge_components.bytes()
+         + p.active.bytes() + p.positions.bytes() + p.previous.bytes()
+         + p.candidate.bytes() + p.direction.bytes() + p.prime.bytes()
+         + p.stalled.bytes() + p.repaired.bytes() + p.work.bytes()
          + p.summary.bytes() + p.old.bytes() + p.temp_size;
 }
 }  // namespace delgpu

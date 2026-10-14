@@ -23,6 +23,8 @@ trim 使用 `module/del` 的 CPU 矩形并集与暴露端面算法；GPU 计算�
 `gui` 子命令只打开设计；`graph --gui 1` 会自动执行建图并显示。
 优化默认参数为 `-max_iterations 200 -max_step 0.25 -jump_offset_nm 35`，CPU/GPU 相同。
 可用 `--max-step`、`--jump-offset-nm` 覆盖；实际参数会在日志中打印。
+GPU 默认不进行步长减半回溯；`--max-backtracks 0|7|19` 分别为零次、七次、十九次
+减半重试（每种尝试总共 1、8、20 个候选步长）。CPU 参考始终保留 20 个候选步长。
 默认数据库是当前 ORFS 的 `flow/results/asap7/ibex/base/5_2_route.odb`。
 
 ## Tcl 命令
@@ -30,6 +32,7 @@ trim 使用 `module/del` 的 CPU 矩形并集与暴露端面算法；GPU 计算�
 ```tcl
 delgpu -gui 1 -verify 1 -max_iterations 0 ;# 只建图、校验、显示
 delgpu -gui 0 -max_iterations 200        ;# GPU 建图和迭代，关闭显示
+delgpu -gui 0 -max_backtracks 19         ;# 保留 CPU 的完整回溯预算
 delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 ```
 
@@ -40,11 +43,15 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
   性能实验应关闭此项，否则包含额外 CPU 工作。
 - `-max_iterations`：默认 200；`0` 只建图。`graph` 启动脚本默认 0，`optimize` 默认 200。
 - `-max_step`：默认 `0.25`，普通梯度更新的每轮最大步长（线宽倍数）；停滞修复不受此限制。
-- `-jump_offset_nm`：默认 `35`。CPU 使用该值作为跨势垒偏移；GPU 优先做合法区间投影，
-  当合法目标不可达时尝试用该偏移跨过 B/C 势垒。两种修复策略仍有区别，参数均按工艺 DBU 换算。
+- `-jump_offset_nm`：默认 `35`。CPU/GPU 均使用 `midpoint ± offset` 跨过 B/C 势垒，
+  偏移按工艺 DBU 和层线宽换算。
+- `-max_backtracks`：仅 GPU，默认 `0`，不进行步长减半重试；范围 `0..19`。
+  保留全层能量下降检查，初始方向失败后仍可尝试 CPU 的两种确定性扰动。
+  `19` 对应 CPU 每种尝试最多 20 个候选步长；CPU 后端不接受该选项。
 - `-frame_ms`：默认 100，GUI 中间快照的最小间隔；`0` 仅显示初态和最终快照。
   不逐轮复制坐标，不为刷新间隔额外 sleep；每个实际 GUI 更新只调用 `pause(1)` 处理事件。
-- `-report`：可选 CSV，记录每层初态、每轮及最佳快照；默认不写文件。
+- `-report`：可选 CSV，记录每层初态、每轮及末态（`final`）；默认不写文件。
+  最终显示和统计保留最后一轮，不恢复历史快照。
 - `-backend`：默认 `gpu`，也支持 `cpu`。CPU 后端不初始化 CUDA；`-verify 1` 只用于 GPU。
 
 显示控制位于 `DELGPU/<层>`：`trims`、`vnodes`、`arcs/A`、`arcs/B`、`arcs/C`，
@@ -100,27 +107,31 @@ QT_QPA_PLATFORM=offscreen ./dev-openroad.sh run -gui -no_settings -exit \
 ## GPU 迭代实现
 
 `src/optimize/TrimOptimizer.cu` 实现常驻坐标/图/工作缓冲、单非阻塞 stream、CUB 归约。
-静态图、移动域、合法区间、CSR 邻接表和边着色索引只上传一次。
+静态图、移动域、合法区间、CSR 邻接表和连通分量索引只上传一次。
 每轮为边势能/导数 → CSR 节点梯度/度数缩放 → 投影候选 → 全层能量下降接受。
-候选最多三种扰动、每种八次回溯；只读取标量摘要，不下载整层坐标。
+候选为普通方向加两种确定性扰动，默认每种只试初始步长；只读取标量摘要，不下载整层坐标。
 约束权重每 25 轮按 10/20/40/80 增长，硬移动域始终强制满足。
 
-与 CPU 不要求相同轨迹：每三轮对停滞边按颜色并行修复，同色边无共享端点；
-将节点对投影到最近的可达合法区间，A/B/C 及自定义 ArcRange 都参与；
-若合法目标不可达，则 B/C 可以使用 `jump_offset_nm` 的跨势垒候选。
-颜色依次在同一 stream 中执行，避免共享节点写竞争。修复可改变整体能量，
-因此另存冲突数最少的快照；冲突数相同时优先最大残差较小、再优先总位移较小。
-最后恢复最佳快照，以独立主机计算检查域、blocked 节点及最终冲突统计。
-此策略不能保证全局最优或所有约束都可满足。
+停滞资格、修复目标和计数清零规则与 CPU 一致：旧、新残差均 ≥5nm，
+端点连续三轮无可见移动时，每轮检查 B/C 跨势垒跳跃。成功后立即清零
+实际移动端点的关联边。A 和负距离 B 不进行跨势垒跳跃。
+每个 GPU 线程拥有一个独立连通分量，分量内按原边顺序修复；分量之间无共享节点，
+可以并行。移动域仍为硬边界，跳跃不受普通梯度最大步长和能量下降条件限制。
+最后下载末态，以独立主机计算检查域、blocked 节点及最终统计。
+默认取消步长减半会改变梯度轨迹；完整回溯模式仍可能因浮点归约顺序出现临界分支差异。
+该方法不能保证全局最优或所有约束都可满足。
 
 冲突按残差超过 `1e-6 DBU` 计数，该阈值只滤除浮点噪声。
-另报 `remaining_5nm`（残差达到 5nm），两者不能混用。
+另报 `remaining_5nm`（残差严格按 ≥5nm 判断，不添加数值容差），两者不能混用。
 `-verify 1` 校验的是建图一致性，不要求迭代与 CPU 相同。
 
 无 GUI 时每层只在最终检查下载一次完整坐标。GUI 更新时下载当前层快照，
 更新 trim、节点和边端点，不重复构图或复制所有层的图。
 统计中的 `coordinate_download_bytes` 只计完整坐标，不计小摘要。
-`total_ms` 包含优化初始化、迭代、最佳状态恢复及最终主机检查，排除建图和读库。
+`total_ms` 包含优化初始化、迭代、最终下载及主机检查，排除建图、读库和 CUDA 上下文初始化。
+`iteration_ms` 是各层循环耗时之和；GUI 开启时包含绘图事件处理，实验应关闭 GUI。
+`extent_um` 为末态绝对 trim 位移之和；`wire_extension_um` 按高/低端方向求净延长量。
+当前数据库的移动域只允许向外移动，二者相同。它们描述 trim 模型，不表示已修改实际布线。
 
 GUI 回归可运行 `test/gui_optimizer.tcl`（同样使用 offscreen Qt）；
 该测试检查迭代后图像变化，以及 `-gui 0` 清除覆盖层。
@@ -139,4 +150,13 @@ headless 数据库重载已通过单独回归。
 每次输出独立 CSV。`DELGPU_BENCHMARK_DIR` 可指定输出目录。
 历史验证记录中的 0.2W/5nm 实验属于旧参数；新默认的记录单独列出。
 
-最新默认参数结果见 [200 / 0.25W / 35nm 验证](doc/default_parameters_validation.md)。
+历史投影修复结果见 [200 / 0.25W / 35nm 验证](doc/default_parameters_validation.md)。
+当前 CPU 跳跃规则和无回溯默认值的结果见 [跳跃与回溯实验](doc/cpu_jump_validation.md)。
+
+```bash
+./dev-openroad.sh run -no_splash -exit tools/OpenROAD/src/delgpu/scripts/benchmark_cpu_jump.tcl
+python3 tools/OpenROAD/src/delgpu/scripts/summarize_cpu_jump.py
+```
+
+该实验预热 GPU 后交替测量 CPU、GPU 零次/七次/十九次减半重试，各三次。
+`DELGPU_BENCHMARK_DIR` 可覆盖输出目录，汇总脚本可接收同一个目录参数。

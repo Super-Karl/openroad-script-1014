@@ -26,7 +26,8 @@ class DelGpu
            double max_step = kDefaultMaxStepW,
            double jump_offset_nm = kDefaultJumpOffsetNm,
            int frame_ms = 100,
-           const char* report = "");
+           const char* report = "",
+           int max_backtracks = kDefaultMaxBacktracks);
 
  private:
   odb::dbBlock* init();
