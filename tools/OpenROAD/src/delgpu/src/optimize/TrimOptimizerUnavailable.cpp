@@ -40,6 +40,10 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph&,
 {
   throw std::runtime_error("CUDA unavailable");
 }
+void TrimOptimizer::setDisplacementDbu(const std::vector<double>&)
+{
+  throw std::runtime_error("CUDA unavailable");
+}
 std::vector<double> TrimOptimizer::displacementDbu()
 {
   throw std::runtime_error("CUDA unavailable");

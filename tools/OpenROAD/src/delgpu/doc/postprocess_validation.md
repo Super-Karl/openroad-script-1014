@@ -3,6 +3,11 @@
 2026-10-15。已接入整数化、分组单端点搜索、双端点搜索及安全回缩，GPU 默认开启。
 通俗图解见 [方案说明](gpu_postprocess_plan.md)。
 
+本文记录初版 `-post_retract_mode single` 的结果；当前默认已改为 `cooperative`，
+同输入对照及新结果见 [安全回缩优化](retraction_validation.md)。
+下文的默认值和实验数据指初版单点回缩；随附 `benchmark_postprocess.tcl` 已显式选择 `single`，
+便于复现历史结果。
+
 ## 使用
 
 ```tcl

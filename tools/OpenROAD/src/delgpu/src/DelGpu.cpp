@@ -40,8 +40,14 @@ void DelGpu::run(bool gui,
                  bool postprocess,
                  int post_sweeps,
                  int post_pair_rounds,
-                 int post_retract_sweeps)
+                 int post_retract_sweeps,
+                 const char* post_retract_mode)
 {
+  const std::string retract_mode
+      = post_retract_mode ? post_retract_mode : "cooperative";
+  if (retract_mode != "single" && retract_mode != "cooperative") {
+    throw std::invalid_argument("Unknown DELGPU retraction mode");
+  }
   if (running_) {
     throw std::runtime_error("DELGPU is already running");
   }
@@ -102,11 +108,12 @@ void DelGpu::run(bool gui,
       mode);
   logger_->report(
       "DELGPU postprocess parameters: enabled={} sweeps={} pair_rounds={} "
-      "retract_sweeps={}",
+      "retract_sweeps={} retract_mode={}",
       gpu && postprocess,
       post_sweeps,
       post_pair_rounds,
-      post_retract_sweeps);
+      post_retract_sweeps,
+      retract_mode);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -173,23 +180,25 @@ void DelGpu::run(bool gui,
       std::chrono::duration<double, std::milli>(built - start).count(),
       std::chrono::duration<double, std::milli>(shown - built).count());
   if (iterations > 0) {
-    runOptimization(
-        block,
-        graphs,
-        gpu,
-        gui,
-        iterations,
-        max_step,
-        jump_offset_nm,
-        frame_ms,
-        report == nullptr ? "" : report,
-        max_backtracks,
-        learning_rate,
-        learning_rate_end,
-        mode,
-        gpu && postprocess,
-        PostprocessOptions{post_sweeps, post_pair_rounds, post_retract_sweeps},
-        logger_);
+    runOptimization(block,
+                    graphs,
+                    gpu,
+                    gui,
+                    iterations,
+                    max_step,
+                    jump_offset_nm,
+                    frame_ms,
+                    report == nullptr ? "" : report,
+                    max_backtracks,
+                    learning_rate,
+                    learning_rate_end,
+                    mode,
+                    gpu && postprocess,
+                    PostprocessOptions{post_sweeps,
+                                       post_pair_rounds,
+                                       post_retract_sweeps,
+                                       retract_mode == "cooperative"},
+                    logger_);
   }
 }
 

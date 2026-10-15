@@ -43,7 +43,7 @@ BAZEL 指定 Bazel 程序，OPENROAD_CUDA_PATH 或 CUDA_HOME 指定 CUDA 路径�
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
-optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--frame-ms 刷新间隔、--report CSV。
+optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--post-retract-mode single|cooperative（默认 cooperative）、--frame-ms 刷新间隔、--report CSV。
 在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
 使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
@@ -96,12 +96,13 @@ case "$command_name" in
       graph_postprocess=
       graph_post_sweeps=
       graph_post_pair_rounds=
+      graph_post_retract_mode=
       graph_post_retract_sweeps=
       graph_frame_ms=100
       graph_report=
       while (($#)); do
         case "$1" in
-          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--learning-rate|--learning-rate-end|--learning-rate-mode|--postprocess|--post-sweeps|--post-pair-rounds|--post-retract-sweeps|--frame-ms|--report)
+          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--learning-rate|--learning-rate-end|--learning-rate-mode|--postprocess|--post-sweeps|--post-pair-rounds|--post-retract-sweeps|--post-retract-mode|--frame-ms|--report)
             (($# >= 2)) || fail "$1 后需要提供值"
             case "$1" in
               --db) graph_db=$2 ;;
@@ -119,6 +120,7 @@ case "$command_name" in
               --post-sweeps) graph_post_sweeps=$2 ;;
               --post-pair-rounds) graph_post_pair_rounds=$2 ;;
               --post-retract-sweeps) graph_post_retract_sweeps=$2 ;;
+              --post-retract-mode) graph_post_retract_mode=$2 ;;
               --frame-ms) graph_frame_ms=$2 ;;
               --report) graph_report=$2 ;;
             esac
@@ -153,6 +155,7 @@ case "$command_name" in
       if [[ -n "$graph_post_sweeps" ]]; then export DELGPU_POST_SWEEPS="$graph_post_sweeps"; fi
       if [[ -n "$graph_post_pair_rounds" ]]; then export DELGPU_POST_PAIR_ROUNDS="$graph_post_pair_rounds"; fi
       if [[ -n "$graph_post_retract_sweeps" ]]; then export DELGPU_POST_RETRACT_SWEEPS="$graph_post_retract_sweeps"; fi
+      if [[ -n "$graph_post_retract_mode" ]]; then export DELGPU_POST_RETRACT_MODE="$graph_post_retract_mode"; fi
       export DELGPU_FRAME_MS="$graph_frame_ms" DELGPU_REPORT="$graph_report"
       launch_args=(-no_init -no_splash)
       if [[ "$graph_gui" == 1 ]]; then launch_args+=(-gui); else launch_args+=(-exit); fi

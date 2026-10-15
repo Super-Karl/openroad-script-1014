@@ -263,7 +263,9 @@ void runOptimization(odb::dbBlock* block,
           "DELGPU postprocess search: layer={} colors={} sweeps={} "
           "pair_rounds={} "
           "retract_sweeps={} single_moves={} pair_moves={} retract_moves={} "
-          "prepare_ms={:.3f} total_ms={:.3f}",
+          "cooperative_moves={} group_moves={} propagation_rounds={} "
+          "prepare_ms={:.3f} "
+          "total_ms={:.3f}",
           layer.layer,
           exact.color_offsets.size() - 1,
           post->sweeps,
@@ -272,6 +274,9 @@ void runOptimization(odb::dbBlock* block,
           post->single_moves,
           post->pair_moves,
           post->retract_moves,
+          post->cooperative_moves,
+          post->group_moves,
+          post->propagation_rounds,
           prepare_ms,
           layer_postprocess_ms);
     }

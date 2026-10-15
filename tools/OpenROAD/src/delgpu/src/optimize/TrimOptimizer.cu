@@ -207,6 +207,16 @@ __global__ void gradientKernel(const OptNode* nodes,
   work[i] = a;
 }
 
+__global__ void validateWarmStart(const OptNode* nodes,
+                                  int n,
+                                  const double* x,
+                                  int* invalid)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n && (!isfinite(x[i]) || x[i] < nodes[i].low || x[i] > nodes[i].up)) {
+    atomicExch(invalid, 1);
+  }
+}
 __global__ void moveKernel(const OptNode* nodes,
                            int n,
                            const double* prev,
@@ -732,6 +742,49 @@ TrimStats TrimOptimizer::step(double lambda, double learning_rate)
   impl_->learning_rate = learning_rate;
   return impl_->step(lambda);
 }
+void TrimOptimizer::setDisplacementDbu(const std::vector<double>& values)
+{
+  auto& p = *impl_;
+  if (values.size() != static_cast<size_t>(p.n)) {
+    throw std::invalid_argument("Invalid warm-start position count");
+  }
+  std::vector<double> normalized(values.size());
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (!std::isfinite(values[i])) {
+      throw std::invalid_argument("Nonfinite warm start");
+    }
+    normalized[i] = values[i] / p.width;
+  }
+  Device<int> invalid(1);
+  check(cudaMemsetAsync(invalid.get(), 0, invalid.bytes(), p.stream));
+  check(cudaMemcpyAsync(p.trial,
+                        normalized.data(),
+                        p.positions.bytes(),
+                        cudaMemcpyHostToDevice,
+                        p.stream));
+  validateWarmStart<<<blocks(p.n), block_size, 0, p.stream>>>(
+      p.nodes.get(), p.n, p.trial, invalid.get());
+  int bad = 0;
+  check(cudaGetLastError());
+  check(cudaMemcpyAsync(
+      &bad, invalid.get(), sizeof(bad), cudaMemcpyDeviceToHost, p.stream));
+  check(cudaStreamSynchronize(p.stream));
+  if (bad) {
+    throw std::invalid_argument("Warm start outside movement domain");
+  }
+  std::swap(p.current, p.trial);
+  p.integer_positions.reset();
+  check(cudaMemcpyAsync(p.previous.get(),
+                        p.current,
+                        p.positions.bytes(),
+                        cudaMemcpyDeviceToDevice,
+                        p.stream));
+  if (p.e) {
+    check(cudaMemsetAsync(p.stalled.get(), 0, p.stalled.bytes(), p.stream));
+    check(cudaMemsetAsync(p.repaired.get(), 0, p.repaired.bytes(), p.stream));
+  }
+  check(cudaStreamSynchronize(p.stream));
+}
 std::vector<double> TrimOptimizer::displacementDbu()
 {
   std::vector<double> result(impl_->n);
@@ -768,7 +821,7 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
       || graph.color_offsets.empty() || graph.color_offsets.front() != 0
       || graph.color_offsets.back() != p.n || graph.tolerance2 <= 0
       || options.max_sweeps < 0 || options.pair_rounds < 0
-      || options.retract_sweeps < 0) {
+      || options.retract_sweeps < 0 || options.propagation_rounds < 0) {
     throw std::invalid_argument("Invalid exact postprocess graph or budget");
   }
   using Clock = std::chrono::steady_clock;
@@ -885,6 +938,23 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
   result.repaired = stats();
   const auto repaired = Clock::now();
   result.repair_ms = milliseconds(quantized, repaired);
+  std::unique_ptr<Device<post::Slack>> slack;
+  std::unique_ptr<Device<int64_t>> caps, next_caps;
+  std::unique_ptr<Device<int>> invalid, parents, labels, heads, links;
+  std::unique_ptr<Device<post::GroupMove>> group_candidates, group_selected;
+  if (options.cooperative_retract && options.retract_sweeps > 0) {
+    slack = std::make_unique<Device<post::Slack>>(p.e);
+    caps = std::make_unique<Device<int64_t>>(p.n);
+    next_caps = std::make_unique<Device<int64_t>>(p.n);
+    invalid = std::make_unique<Device<int>>(p.component_count);
+    parents = std::make_unique<Device<int>>(p.n);
+    labels = std::make_unique<Device<int>>(p.n);
+    heads = std::make_unique<Device<int>>(p.n);
+    links = std::make_unique<Device<int>>(p.n);
+    group_candidates = std::make_unique<Device<post::GroupMove>>(p.n);
+    group_selected
+        = std::make_unique<Device<post::GroupMove>>(p.component_count);
+  }
   for (int sweep = 0; sweep < options.retract_sweeps; ++sweep) {
     check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
     for (int c = 0; c < colors; ++c) {
@@ -894,10 +964,97 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
             v, order.get(), l, u, moves.get());
       }
     }
-    const int count = moved();
+    const int single_count = moved();
+    int collective_count = 0;
+    if (options.cooperative_retract && !single_count) {
+      if (p.e) {
+        post::retractionSlack<<<blocks(p.e), block_size, 0, p.stream>>>(
+            v, p.e, slack->get());
+      }
+      post::initialRetractionCaps<<<blocks(p.n), block_size, 0, p.stream>>>(
+          v, p.n, slack->get(), caps->get());
+      int64_t* current_caps = caps->get();
+      int64_t* trial_caps = next_caps->get();
+      // Poll in batches to amortize scalar copies. All propagation reads a
+      // frozen coordinate snapshot, so no atomics on positions are needed.
+      for (int round = 0; round < options.propagation_rounds;) {
+        check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+        const int end = std::min(options.propagation_rounds, round + 8);
+        for (; round < end; ++round) {
+          post::
+              propagateRetractionCaps<<<blocks(p.n), block_size, 0, p.stream>>>(
+                  v, p.n, slack->get(), current_caps, trial_caps, moves.get());
+          std::swap(current_caps, trial_caps);
+          ++result.propagation_rounds;
+        }
+        if (!moved()) {
+          break;
+        }
+      }
+      if (p.e) {
+        check(cudaMemsetAsync(invalid->get(), 0, invalid->bytes(), p.stream));
+        post::verifyRetraction<<<blocks(p.e), block_size, 0, p.stream>>>(
+            v, p.e, current_caps, p.edge_components.get(), invalid->get());
+      }
+      check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+      post::commitRetraction<<<blocks(p.n), block_size, 0, p.stream>>>(
+          v,
+          p.n,
+          current_caps,
+          p.edge_components.get(),
+          invalid->get(),
+          moves.get());
+      collective_count = moved();
+      result.cooperative_moves += collective_count;
+      if (p.e) {
+        post::retractionSlack<<<blocks(p.e), block_size, 0, p.stream>>>(
+            v, p.e, slack->get());
+        post::initializeGroups<<<blocks(p.n), block_size, 0, p.stream>>>(
+            p.n, parents->get(), heads->get(), group_candidates->get());
+        post::unionGroups<<<blocks(p.e), block_size, 0, p.stream>>>(
+            v, p.e, slack->get(), parents->get());
+        post::listGroups<<<blocks(p.n), block_size, 0, p.stream>>>(
+            p.n, parents->get(), labels->get(), heads->get(), links->get());
+        post::groupCandidates<<<blocks(p.n), block_size, 0, p.stream>>>(
+            v,
+            p.n,
+            slack->get(),
+            labels->get(),
+            heads->get(),
+            links->get(),
+            group_candidates->get());
+        post::selectGroups<<<p.component_count, 128, 0, p.stream>>>(
+            p.edges.get(),
+            p.component_edges.get(),
+            p.component_offsets.get(),
+            labels->get(),
+            group_candidates->get(),
+            group_selected->get());
+        check(cudaMemsetAsync(invalid->get(), 0, invalid->bytes(), p.stream));
+        post::verifyGroups<<<blocks(p.e), block_size, 0, p.stream>>>(
+            v,
+            p.e,
+            labels->get(),
+            p.edge_components.get(),
+            group_selected->get(),
+            invalid->get());
+        check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+        post::commitGroups<<<blocks(p.n), block_size, 0, p.stream>>>(
+            v,
+            p.n,
+            labels->get(),
+            p.edge_components.get(),
+            group_selected->get(),
+            invalid->get(),
+            moves.get());
+        const int groups = moved();
+        result.group_moves += groups;
+        collective_count += groups;
+      }
+    }
     ++result.retract_sweeps;
-    result.retract_moves += count;
-    if (!count) {
+    result.retract_moves += single_count + collective_count;
+    if (!single_count && !collective_count) {
       break;
     }
   }

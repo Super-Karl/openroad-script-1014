@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Compare the same deterministic 150-round GPU result with each postprocess stage.
+# Reproduce the original single-node retraction on the same deterministic 150-round GPU result with each postprocess stage.
 set script_dir [file dirname [file normalize [info script]]]
 set orfs [file normalize [file join $script_dir ../../../../..]]
 set db [file join $orfs flow results asap7 ibex base 5_2_route.odb]
@@ -10,7 +10,7 @@ file mkdir $output
 read_db $db
 set wire_before [del::regular_wire_length_dbu_cmd]
 puts "POSTPROCESS warmup"
-delgpu -gui 0
+delgpu -gui 0 -post_retract_mode single
 for {set sample 1} {$sample <= 3} {incr sample} {
   set cases {continuous quantized repaired full}
   if {$sample % 2 == 0} {set cases [lreverse $cases]}
@@ -23,7 +23,7 @@ for {set sample 1} {$sample <= 3} {incr sample} {
     }
     puts "POSTPROCESS sample=$sample name=$name"
     set started [clock microseconds]
-    delgpu -gui 0 {*}$options -report [file join $output ${name}_${sample}.csv]
+    delgpu -gui 0 -post_retract_mode single {*}$options -report [file join $output ${name}_${sample}.csv]
     puts "POSTPROCESS wall_ms=[expr {([clock microseconds]-$started)/1000.0}] name=$name sample=$sample"
   }
 }

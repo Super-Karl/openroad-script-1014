@@ -378,6 +378,386 @@ __global__ void retract(View v,
   v.x[node] = candidate;
   atomicAdd(moves, 1);
 }
+// CPU DEL polish fixes the nearest expanded interval and optimizes all node
+// positions together. Here we compute a feasible simultaneous toward-zero
+// move on those same intervals, using integer difference-bound propagation.
+struct Slack
+{
+  I lower, upper;  // allowed decrease/increase of distance, in whole DBU
+};
+constexpr I unlimited = INT64_MAX / 8;
+__device__ int towardZero(I x)
+{
+  return x < 0 ? 1 : (x > 0 ? -1 : 0);
+}
+__global__ void retractionSlack(View v, int ne, Slack* slack)
+{
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if (id >= ne) {
+    return;
+  }
+  const auto e = v.edges[id];
+  const I d = distance(v, id), g = gap(v, id, d);
+  Slack s{0, 0};
+  for (int j = e.range_begin; j < e.range_end; ++j) {
+    const auto r = v.ranges[j];
+    if ((r.has_low && d < r.low2 - g) || (r.has_high && d > r.high2 + g)) {
+      continue;
+    }
+    s.lower = r.has_low ? floorHalf(d - r.low2 + g) : unlimited;
+    s.upper = r.has_high ? floorHalf(r.high2 + g - d) : unlimited;
+    break;
+  }
+  slack[id] = s;
+}
+// Mixed directions create t_src+t_dst <= slack instead of a difference bound.
+// Split this capacity deterministically before propagation, so subsequent cap
+// reductions can only improve feasibility. Use integer proportional shares.
+__device__ I share(I capacity, I own, I other, bool source)
+{
+  if (capacity >= own + other) {
+    return own;
+  }
+  // Geometry is <=2^40; avoid overflow of capacity*own via double estimate,
+  // then enforce an exact complementary split and the bounds in the guard.
+  const I first
+      = bound(static_cast<I>(double(capacity) * double(source ? own : other)
+                             / double(own + other)),
+              0,
+              capacity);
+  return source ? first : capacity - first;
+}
+__global__ void initialRetractionCaps(View v,
+                                      int nn,
+                                      const Slack* slack,
+                                      I* caps)
+{
+  const int node = blockIdx.x * blockDim.x + threadIdx.x;
+  if (node >= nn) {
+    return;
+  }
+  const int sign = towardZero(v.x[node]);
+  I cap = absolute(v.x[node]);
+  const auto n = v.csr[node];
+  for (int k = n.begin; k < n.end && cap; ++k) {
+    const int id = v.incident[k];
+    const auto e = v.edges[id];
+    const bool source = e.src == node;
+    const int other = source ? e.dst : e.src;
+    const int other_sign = towardZero(v.x[other]);
+    if (sign == other_sign) {
+      continue;
+    }
+    const int effect = source ? -sign : sign;
+    const I capacity = effect > 0 ? slack[id].upper : slack[id].lower;
+    const I own = absolute(v.x[node]), neighbor = absolute(v.x[other]);
+    cap = lo(cap, share(capacity, own, neighbor, source));
+  }
+  caps[node] = cap;
+}
+__global__ void propagateRetractionCaps(View v,
+                                        int nn,
+                                        const Slack* slack,
+                                        const I* before,
+                                        I* after,
+                                        int* changes)
+{
+  const int node = blockIdx.x * blockDim.x + threadIdx.x;
+  if (node >= nn) {
+    return;
+  }
+  I cap = before[node];
+  const int sign = towardZero(v.x[node]);
+  const auto n = v.csr[node];
+  for (int k = n.begin; k < n.end && cap; ++k) {
+    const int id = v.incident[k];
+    const auto e = v.edges[id];
+    const bool source = e.src == node;
+    const int other = source ? e.dst : e.src;
+    if (sign != towardZero(v.x[other])) {
+      continue;
+    }
+    const int effect = source ? -sign : sign;
+    const I capacity = effect > 0 ? slack[id].upper : slack[id].lower;
+    cap = lo(cap, before[other] + capacity);
+  }
+  after[node] = cap;
+  if (cap != before[node]) {
+    atomicExch(changes, 1);
+  }
+}
+__device__ I proposed(const View& v, const I* caps, int node)
+{
+  return v.x[node] + towardZero(v.x[node]) * caps[node];
+}
+// Budget exhaustion is safe: reject any component containing a still-invalid
+// proposal. No coordinates are changed during propagation or verification.
+__global__ void verifyRetraction(View v,
+                                 int ne,
+                                 const I* caps,
+                                 const int* components,
+                                 int* invalid)
+{
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if (id >= ne) {
+    return;
+  }
+  const auto e = v.edges[id];
+  const I d = v.initial[id]
+              + 2 * (proposed(v, caps, e.dst) - proposed(v, caps, e.src));
+  if (gap(v, id, d) > gap(v, id, distance(v, id))) {
+    atomicExch(invalid + components[id], 1);
+  }
+}
+__global__ void commitRetraction(View v,
+                                 int nn,
+                                 const I* caps,
+                                 const int* components,
+                                 const int* invalid,
+                                 int* moves)
+{
+  const int node = blockIdx.x * blockDim.x + threadIdx.x;
+  if (node >= nn || !caps[node]) {
+    return;
+  }
+  const auto n = v.csr[node];
+  if (n.begin < n.end && invalid[components[v.incident[n.begin]]]) {
+    return;
+  }
+  const I candidate = proposed(v, caps, node);
+  if (candidate < v.nodes[node].low || candidate > v.nodes[node].up
+      || absolute(candidate) >= absolute(v.x[node])) {
+    return;
+  }
+  v.x[node] = candidate;
+  atomicAdd(moves, 1);
+}
+// Equality-connected trims may have opposite outward directions. Translating
+// the entire merged group can shorten the total even if a minority of its
+// nodes moves farther from zero, as allowed by DEL's LP objective.
+struct GroupMove
+{
+  I delta = 0, shift = 0;
+  int root = -1;
+};
+__device__ bool groupBetter(const GroupMove& a, const GroupMove& b)
+{
+  if (a.root < 0) {
+    return false;
+  }
+  if (b.root < 0) {
+    return true;
+  }
+  return a.delta < b.delta || (a.delta == b.delta && a.root < b.root);
+}
+__global__ void initializeGroups(int n,
+                                 int* parents,
+                                 int* heads,
+                                 GroupMove* candidates)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) {
+    parents[i] = i;
+    heads[i] = -1;
+    candidates[i] = GroupMove{};
+  }
+}
+__device__ int groupRoot(int* parents, int node)
+{
+  int next = atomicAdd(parents + node, 0);
+  while (next != node) {
+    node = next;
+    next = atomicAdd(parents + node, 0);
+  }
+  return node;
+}
+__global__ void unionGroups(View v, int ne, const Slack* slack, int* parents)
+{
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if (id >= ne || slack[id].lower || slack[id].upper) {
+    return;
+  }
+  const auto e = v.edges[id];
+  while (true) {
+    int a = groupRoot(parents, e.src), b = groupRoot(parents, e.dst);
+    if (a == b) {
+      return;
+    }
+    if (a > b) {
+      int temporary = a;
+      a = b;
+      b = temporary;
+    }
+    // Parents always decrease; concurrent unions cannot create cycles.
+    if (atomicCAS(parents + b, b, a) == b) {
+      return;
+    }
+  }
+}
+__global__ void listGroups(int n,
+                           int* parents,
+                           int* labels,
+                           int* heads,
+                           int* next)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) {
+    const int root = groupRoot(parents, i);
+    labels[i] = root;
+    next[i] = atomicExch(heads + root, i);
+  }
+}
+__global__ void groupCandidates(View v,
+                                int nn,
+                                const Slack* slack,
+                                const int* labels,
+                                const int* heads,
+                                const int* next,
+                                GroupMove* candidates)
+{
+  const int root = blockIdx.x * blockDim.x + threadIdx.x;
+  if (root >= nn || heads[root] < 0) {
+    return;
+  }
+  int count = 0;
+  I low = -unlimited, up = unlimited, min_x = unlimited, max_x = -unlimited;
+  for (int node = heads[root]; node >= 0; node = next[node]) {
+    // Keep worst-case work bounded for unusually large merged groups.
+    if (++count > 256) {
+      return;
+    }
+    const I x = v.x[node];
+    low = hi(low, v.nodes[node].low - x);
+    up = lo(up, v.nodes[node].up - x);
+    min_x = lo(min_x, x);
+    max_x = hi(max_x, x);
+    const auto n = v.csr[node];
+    for (int k = n.begin; k < n.end; ++k) {
+      const int id = v.incident[k];
+      const auto e = v.edges[id];
+      const bool source = e.src == node;
+      if (labels[source ? e.dst : e.src] == root) {
+        continue;
+      }
+      low = hi(low, -(source ? slack[id].upper : slack[id].lower));
+      up = lo(up, source ? slack[id].lower : slack[id].upper);
+    }
+  }
+  if (count < 2 || low > up) {
+    return;
+  }
+  // Median minimizes sum(abs(x_i + shift)); integer binary selection avoids
+  // sorting or nondeterministic floating sums on the atomic member lists.
+  I l = min_x, u = max_x;
+  while (l < u) {
+    const I middle = l + (u - l) / 2;
+    int smaller = 0;
+    for (int node = heads[root]; node >= 0; node = next[node]) {
+      smaller += v.x[node] <= middle;
+    }
+    if (smaller >= (count + 1) / 2) {
+      u = middle;
+    } else {
+      l = middle + 1;
+    }
+  }
+  GroupMove candidate;
+  candidate.shift = bound(-l, low, up);
+  for (int node = heads[root]; node >= 0; node = next[node]) {
+    candidate.delta
+        += absolute(v.x[node] + candidate.shift) - absolute(v.x[node]);
+  }
+  if (candidate.delta < 0) {
+    candidate.root = root;
+    candidates[root] = candidate;
+  }
+}
+__global__ void selectGroups(const OptEdge* edges,
+                             const int* order,
+                             const int* offsets,
+                             const int* labels,
+                             const GroupMove* candidates,
+                             GroupMove* selected)
+{
+  __shared__ __align__(16) unsigned char storage[sizeof(GroupMove) * 128];
+  auto* best = reinterpret_cast<GroupMove*>(storage);
+  const int c = blockIdx.x, t = threadIdx.x;
+  GroupMove winner;
+  for (int k = offsets[c] + t; k < offsets[c + 1]; k += blockDim.x) {
+    const auto e = edges[order[k]];
+    const GroupMove a = candidates[labels[e.src]],
+                    b = candidates[labels[e.dst]];
+    if (groupBetter(a, winner)) {
+      winner = a;
+    }
+    if (groupBetter(b, winner)) {
+      winner = b;
+    }
+  }
+  best[t] = winner;
+  __syncthreads();
+  for (int stride = blockDim.x / 2; stride; stride /= 2) {
+    if (t < stride && groupBetter(best[t + stride], best[t])) {
+      best[t] = best[t + stride];
+    }
+    __syncthreads();
+  }
+  if (!t) {
+    selected[c] = best[0];
+  }
+}
+__device__ I groupProposal(const View& v,
+                           int node,
+                           const int* labels,
+                           const GroupMove& selected)
+{
+  return v.x[node] + (labels[node] == selected.root ? selected.shift : 0);
+}
+__global__ void verifyGroups(View v,
+                             int ne,
+                             const int* labels,
+                             const int* components,
+                             const GroupMove* selected,
+                             int* invalid)
+{
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if (id >= ne) {
+    return;
+  }
+  const auto e = v.edges[id];
+  const int c = components[id];
+  const auto p = selected[c];
+  if (p.root < 0) {
+    return;
+  }
+  const I source = groupProposal(v, e.src, labels, p),
+          target = groupProposal(v, e.dst, labels, p);
+  const I d = v.initial[id] + 2 * (target - source);
+  if (gap(v, id, d) > gap(v, id, distance(v, id)) || source < v.nodes[e.src].low
+      || source > v.nodes[e.src].up || target < v.nodes[e.dst].low
+      || target > v.nodes[e.dst].up) {
+    atomicExch(invalid + c, 1);
+  }
+}
+__global__ void commitGroups(View v,
+                             int nn,
+                             const int* labels,
+                             const int* components,
+                             const GroupMove* selected,
+                             const int* invalid,
+                             int* moves)
+{
+  const int node = blockIdx.x * blockDim.x + threadIdx.x;
+  if (node >= nn || v.csr[node].begin == v.csr[node].end) {
+    return;
+  }
+  const int c = components[v.incident[v.csr[node].begin]];
+  const auto p = selected[c];
+  if (!invalid[c] && p.root >= 0 && labels[node] == p.root) {
+    v.x[node] += p.shift;
+    atomicAdd(moves, 1);
+  }
+}
 struct Sum
 {
   __host__ __device__ PostprocessStats

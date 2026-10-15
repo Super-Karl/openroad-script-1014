@@ -192,6 +192,110 @@ TEST(DelgpuPostprocess, SharedNeighborsAndParallelArcsNeverWorsenObjective)
     }
   }
 }
+TEST(DelgpuPostprocess, CooperativeRetractionUnlocksMergedChain)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 0, 0});
+  for (int i = 1; i < 4; ++i) {
+    edge(l, i - 1, i, {{.high2 = 0}}, ArcType::kB);
+  }
+  const std::vector<double> before{20, 20, 20, 20};
+  auto g = makePostprocessGraph(l, 1000);
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(before);
+  auto single = gpu->postprocess(g, {0, 0, 8, false});
+  EXPECT_EQ(single.retracted.extent, 80);
+  EXPECT_EQ(gpu->displacementDbu(), before);
+  gpu->setDisplacementDbu(before);
+  auto cooperative = gpu->postprocess(g, {0, 0, 8, true});
+  EXPECT_EQ(cooperative.retracted.extent, 0);
+  EXPECT_EQ(cooperative.retracted.gap2, 0);
+  EXPECT_EQ(cooperative.cooperative_moves, 4);
+  equal(cooperative.retracted,
+        assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+  // Invalid warm starts must not alter the successful exact result.
+  EXPECT_THROW(gpu->setDisplacementDbu({40, 0, 0, 0}), std::invalid_argument);
+  EXPECT_EQ(gpu->displacementDbu(), (std::vector<double>{0, 0, 0, 0}));
+}
+TEST(DelgpuPostprocess,
+     MergedGroupTranslationCanIncreaseOneEndpointToShortenTotal)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 100});
+  l.nodes[2].low2 = -20;  // allow third trim to extend to displacement -60
+  edge(l, 0, 1, {{.high2 = 0}}, ArcType::kB);
+  edge(l, 1, 2, {{.high2 = 0}}, ArcType::kB);
+  const std::vector<double> before{20, 20, -30};
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(before);
+  const auto r
+      = gpu->postprocess(makePostprocessGraph(l, 1000), {0, 0, 8, true});
+  const auto after = gpu->displacementDbu();
+  EXPECT_EQ(r.quantized.extent, 70);
+  EXPECT_EQ(r.retracted.extent, 50);  // fixed-merge LP minimum
+  EXPECT_GT(std::abs(after[2]), std::abs(before[2]));
+  EXPECT_EQ(r.retracted.gap2, 0);
+  EXPECT_EQ(r.group_moves, 3);
+  equal(r.retracted, assessIntegerDisplacement(l, after, 1000));
+}
+TEST(DelgpuPostprocess, TruncatedPropagationRejectsOnlyUnsafeComponent)
+{
+  initializeGpu();
+  auto l = graph(std::vector<int64_t>(202, 0));
+  l.nodes[0].blocked = true;
+  edge(l, 0, 1, {{.low2 = 40, .has_high = false}});
+  for (int i = 2; i < 200; ++i) {
+    edge(l, i - 1, i, {{.high2 = 0}}, ArcType::kB);
+  }
+  edge(l, 200, 201, {{.high2 = 0}}, ArcType::kB);
+  std::vector<double> before(202, 20);
+  before[0] = 0;
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(before);
+  auto result
+      = gpu->postprocess(makePostprocessGraph(l, 1000), {0, 0, 2, true, 4});
+  auto after = gpu->displacementDbu();
+  for (int i = 0; i < 200; ++i) {
+    EXPECT_EQ(after[i], before[i]);
+  }
+  EXPECT_EQ(after[200], 0);
+  EXPECT_EQ(after[201], 0);
+  EXPECT_EQ(result.retracted.extent, result.quantized.extent - 40);
+  EXPECT_EQ(result.retracted.gap2, 0);
+  equal(result.retracted, assessIntegerDisplacement(l, after, 1000));
+}
+TEST(DelgpuPostprocess, CooperativeMixedDirectionsPreserveEachOriginalResidual)
+{
+  initializeGpu();
+  std::mt19937 random(3515);
+  for (int sample = 0; sample < 15; ++sample) {
+    auto l = graph(std::vector<int64_t>(20, 0));
+    std::vector<double> before;
+    for (int i = 0; i < 20; ++i) {
+      before.push_back(int(random() % 41) - 20);
+    }
+    for (int i = 0; i < 45; ++i) {
+      int a = random() % 20, b = random() % 20;
+      if (a == b) {
+        continue;
+      }
+      const int low = int(random() % 41) - 20;
+      edge(l, a, b, {{.low2 = low, .high2 = low + 15}});
+    }
+    auto gpu = makeGpuOptimizer(l, 5, 0.25);
+    gpu->setDisplacementDbu(before);
+    auto r = gpu->postprocess(makePostprocessGraph(l, 1000), {0, 0, 8, true});
+    auto after = gpu->displacementDbu();
+    equal(r.retracted, assessIntegerDisplacement(l, after, 1000));
+    EXPECT_LE(r.retracted.extent, r.quantized.extent);
+    for (const auto& e : l.arcs) {
+      auto one = l;
+      one.arcs = {e};
+      EXPECT_LE(assessIntegerDisplacement(one, after, 1000).gap2,
+                assessIntegerDisplacement(one, before, 1000).gap2);
+    }
+  }
+}
 TEST(DelgpuPostprocess, BlockedUnsatisfiableHalfDbuMergeAndEmptyEdges)
 {
   initializeGpu();

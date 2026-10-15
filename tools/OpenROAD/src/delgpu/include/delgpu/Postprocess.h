@@ -28,6 +28,8 @@ struct PostprocessOptions
   int max_sweeps = 24;
   int pair_rounds = 8;
   int retract_sweeps = 8;
+  bool cooperative_retract = true;
+  int propagation_rounds = 128;
 };
 struct PostprocessStats
 {
@@ -39,6 +41,8 @@ struct PostprocessResult
   PostprocessStats quantized, repaired, retracted;
   int sweeps = 0, pair_rounds = 0, retract_sweeps = 0;
   int64_t single_moves = 0, pair_moves = 0, retract_moves = 0;
+  int64_t cooperative_moves = 0, group_moves = 0;
+  int propagation_rounds = 0;
   double quantize_ms = 0, repair_ms = 0, retract_ms = 0, total_ms = 0;
 };
 }  // namespace delgpu

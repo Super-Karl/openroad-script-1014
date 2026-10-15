@@ -57,6 +57,8 @@ class TrimOptimizer
   TrimStats step(double lambda, double learning_rate);
   PostprocessResult postprocess(const PostprocessGraph& graph,
                                 const PostprocessOptions& options = {});
+  // Warm start for independent same-input experiments; validates hard domains.
+  void setDisplacementDbu(const std::vector<double>& values);
   std::vector<double> displacementDbu();
   size_t deviceBytes() const;
 

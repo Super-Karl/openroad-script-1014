@@ -72,6 +72,9 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 - `-post_sweeps`：修复扫描上限，默认 `24`。每轮先扫描单端点，停滞后尝试一轮双端点；
   提前无改善即停止。`0` 跳过单/双端点修复，可搭配回缩预算进行消融实验。
 - `-post_pair_rounds`：双端点搜索轮数上限，默认 `8`；`0` 禁用双端点搜索。
+- `-post_retract_mode`：默认 `cooperative`，在原单点回缩停滞后追加整组协同回缩和
+  合并组平移；`single` 可复现原方法。允许个别端点延长，但总延长量必须下降，
+  每条关联边残差均不能增加。启动选项为 `--post-retract-mode`。
 - `-post_retract_sweeps`：安全回缩扫描上限，默认 `8`；`0` 禁用回缩。
   三项均接受非负整数；启动脚本对应 `--post-sweeps`、`--post-pair-rounds`、
   `--post-retract-sweeps`，后处理开关对应 `--postprocess`。
@@ -209,13 +212,19 @@ python3 tools/OpenROAD/src/delgpu/scripts/summarize_cpu_jump.py
 ## GPU 整数后处理
 
 通俗图解见 [后处理计划](doc/gpu_postprocess_plan.md)，实测见
-[后处理验证](doc/postprocess_validation.md)。主机只准备原始整数几何和确定性节点分组，
+[后处理验证](doc/postprocess_validation.md)，新版回缩对照见
+[安全回缩优化](doc/retraction_validation.md)。主机只准备原始整数几何和确定性节点分组，
 复用现有 GPU CSR/连通分量，位移继续留在设备上，不重新建 trim 图。
 
 处理顺序为：域内整数位移 → 分颜色单端点搜索 → 停滞时双端点搜索 → 安全回缩。
 修复按 `(≥5nm 数量, 所有正残差数量, 残差总量, 绝对位移总量)` 顺序接受严格改善，
 检查移动端点关联的全部规则；双端点按关联边并集评分，每个连通分量每轮仅提交一个方案。
-回缩要求每条关联边残差不增加且绝对位移下降。最终由独立 CPU 整数检查器
+回缩要求每条关联边残差不增加且绝对位移总量下降。
+默认在单点回缩停滞后执行整数差分界传播，允许一组端点同时向原点回退；
+再对合并组求最优整体平移，参考 DEL 的 LP 允许部分端点伸长、总体缩短的做法。
+合并组每个连通分量每次只提交一个方案，所有方案先逐边验证再写坐标。
+GPU 分组和候选全过程留在设备上；传播上限内无法通过检查的分量保留原位置。
+最终由独立 CPU 整数检查器
 直接检查原始 Vnode/ArcRange；它不调用 LP/MIP，也不重新运行连续优化。
 
 后处理属于局部搜索，不保证全局最优。整数化可能新增违例，单调改进保证从
@@ -225,7 +234,7 @@ python3 tools/OpenROAD/src/delgpu/scripts/summarize_cpu_jump.py
 `device_mib` 是该层的常驻优化缓冲大小，不代表后处理临时缓冲的峰值。
 
 ```bash
-# 在 ORFS 根目录：预热后交替比较连续、仅取整、修复、完整后处理，各 3 次
+# 在 ORFS 根目录：复现初版单点回缩，交替比较连续、仅取整、修复、完整后处理，各 3 次
 mkdir -p flow/reports/asap7/ibex/base/delgpu_postprocess
 ./dev-openroad.sh run -no_splash -exit \
   tools/OpenROAD/src/delgpu/scripts/benchmark_postprocess.tcl \
@@ -235,3 +244,17 @@ python3 tools/OpenROAD/src/delgpu/scripts/summarize_postprocess.py \
 ```
 
 历史学习率、跳跃/回溯实验脚本已显式关闭后处理，以保持其原有对照含义。
+
+新版安全回缩默认 8 次扫描，在同一修复末态上将延长量从 2632.331µm 降到
+2607.572µm，≥5nm 与 <5nm 违例仍为 36/48。预热后三次测试中，回缩阶段耗时中位数
+从 6.344ms 增至 23.955ms。16 次得到 2607.525µm，收益仅 0.047µm，故保留默认 8 次。
+
+```bash
+# 比较原方法及新版 8/16/32 次，三次交替测量，保持修复输入完全一致
+mkdir -p flow/reports/asap7/ibex/base/delgpu_retraction
+./dev-openroad.sh run -no_splash -exit \
+  tools/OpenROAD/src/delgpu/scripts/benchmark_retraction.tcl \
+  > flow/reports/asap7/ibex/base/delgpu_retraction/benchmark.log 2>&1
+python3 tools/OpenROAD/src/delgpu/scripts/summarize_retraction.py \
+  flow/reports/asap7/ibex/base/delgpu_retraction
+```

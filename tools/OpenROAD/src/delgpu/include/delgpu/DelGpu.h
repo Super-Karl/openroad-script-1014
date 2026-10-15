@@ -35,7 +35,8 @@ class DelGpu
            bool postprocess = true,
            int post_sweeps = 24,
            int post_pair_rounds = 8,
-           int post_retract_sweeps = 8);
+           int post_retract_sweeps = 8,
+           const char* post_retract_mode = "cooperative");
 
  private:
   odb::dbBlock* init();
