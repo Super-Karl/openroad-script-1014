@@ -3,6 +3,7 @@
 #include <string>
 
 #include "delgpu/Graph.h"
+#include "delgpu/Postprocess.h"
 namespace odb {
 class dbBlock;
 }
@@ -23,5 +24,7 @@ void runOptimization(odb::dbBlock* block,
                      double learning_rate,
                      double learning_rate_end,
                      const std::string& learning_rate_mode,
+                     bool postprocess,
+                     const PostprocessOptions& post_options,
                      utl::Logger* logger);
 }

@@ -36,7 +36,11 @@ void DelGpu::run(bool gui,
                  int max_backtracks,
                  double learning_rate,
                  double learning_rate_end,
-                 const char* learning_rate_mode)
+                 const char* learning_rate_mode,
+                 bool postprocess,
+                 int post_sweeps,
+                 int post_pair_rounds,
+                 int post_retract_sweeps)
 {
   if (running_) {
     throw std::runtime_error("DELGPU is already running");
@@ -58,7 +62,8 @@ void DelGpu::run(bool gui,
     throw std::invalid_argument(
         "Adaptive mode requires GPU and end <= initial rate");
   }
-  if (iterations < 0 || frame_ms < 0 || !std::isfinite(max_step)
+  if (post_sweeps < 0 || post_pair_rounds < 0 || post_retract_sweeps < 0
+      || iterations < 0 || frame_ms < 0 || !std::isfinite(max_step)
       || max_step <= 0 || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
       || max_backtracks < 0 || max_backtracks > 19
       || !std::isfinite(learning_rate) || learning_rate <= 0
@@ -95,6 +100,13 @@ void DelGpu::run(bool gui,
       gpu ? max_step * learning_rate : max_step,
       gpu ? learning_rate_end : 1.0,
       mode);
+  logger_->report(
+      "DELGPU postprocess parameters: enabled={} sweeps={} pair_rounds={} "
+      "retract_sweeps={}",
+      gpu && postprocess,
+      post_sweeps,
+      post_pair_rounds,
+      post_retract_sweeps);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -161,20 +173,23 @@ void DelGpu::run(bool gui,
       std::chrono::duration<double, std::milli>(built - start).count(),
       std::chrono::duration<double, std::milli>(shown - built).count());
   if (iterations > 0) {
-    runOptimization(block,
-                    graphs,
-                    gpu,
-                    gui,
-                    iterations,
-                    max_step,
-                    jump_offset_nm,
-                    frame_ms,
-                    report == nullptr ? "" : report,
-                    max_backtracks,
-                    learning_rate,
-                    learning_rate_end,
-                    mode,
-                    logger_);
+    runOptimization(
+        block,
+        graphs,
+        gpu,
+        gui,
+        iterations,
+        max_step,
+        jump_offset_nm,
+        frame_ms,
+        report == nullptr ? "" : report,
+        max_backtracks,
+        learning_rate,
+        learning_rate_end,
+        mode,
+        gpu && postprocess,
+        PostprocessOptions{post_sweeps, post_pair_rounds, post_retract_sweeps},
+        logger_);
   }
 }
 

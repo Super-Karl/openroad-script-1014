@@ -4,6 +4,12 @@
 #include "delgpu/Parameters.h"
 #include "delgpu/TrimOptimizer.h"
 namespace delgpu {
+PostprocessGraph makePostprocessGraph(const LayerNodes& layer,
+                                      int dbu_per_micron);
+PostprocessStats assessIntegerDisplacement(
+    const LayerNodes& layer,
+    const std::vector<double>& displacement,
+    int dbu_per_micron);
 std::unique_ptr<TrimOptimizer> makeGpuOptimizer(
     const LayerNodes& layer,
     double tolerance_dbu,

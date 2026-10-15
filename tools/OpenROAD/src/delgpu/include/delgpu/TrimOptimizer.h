@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 
+#include "delgpu/Postprocess.h"
+
 namespace delgpu {
 struct OptNode
 {
@@ -53,6 +55,8 @@ class TrimOptimizer
   TrimStats evaluate(double lambda);
   TrimStats step(double lambda);
   TrimStats step(double lambda, double learning_rate);
+  PostprocessResult postprocess(const PostprocessGraph& graph,
+                                const PostprocessOptions& options = {});
   std::vector<double> displacementDbu();
   size_t deviceBytes() const;
 

@@ -12,14 +12,14 @@ file mkdir $output
 read_db $db
 set wire_before [del::regular_wire_length_dbu_cmd]
 puts "ADAPTIVE warmup"
-delgpu -gui 0 -backend gpu -max_iterations 200 -learning_rate_mode linear -learning_rate 1
+delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations 200 -learning_rate_mode linear -learning_rate 1
 if {$phase eq "sweep"} {
   foreach iterations {100 125 150 200} {
     foreach pair {{1.5 0.5} {1.5 1} {2 0.5} {2 1} {3 0.5} {3 1}} {
       lassign $pair rate end
       set name [string map {. p} sweep_${iterations}_${rate}_${end}]
       puts "ADAPTIVE phase=sweep name=$name iterations=$iterations rate=$rate end=$end"
-      delgpu -gui 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
+      delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
         -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode adaptive \
         -learning_rate $rate -learning_rate_end $end \
         -report [file join $output ${name}.csv]
@@ -34,7 +34,7 @@ if {$phase eq "sweep"} {
       lassign $case name mode iterations rate end
       puts "ADAPTIVE phase=confirm name=$name mode=$mode iterations=$iterations rate=$rate end=$end sample=$sample"
       set started [clock microseconds]
-      delgpu -gui 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
+      delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
         -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode $mode \
         -learning_rate $rate -learning_rate_end $end \
         -report [file join $output ${name}_${sample}.csv]

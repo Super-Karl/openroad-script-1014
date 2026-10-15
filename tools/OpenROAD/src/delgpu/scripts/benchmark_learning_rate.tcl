@@ -12,13 +12,13 @@ file mkdir $lr_output
 read_db $lr_db
 set lr_wire_before [del::regular_wire_length_dbu_cmd]
 puts "LRBENCH warmup rate=1 iterations=200"
-delgpu -gui 0 -backend gpu -max_iterations 200 -max_step 0.25 \
+delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations 200 -max_step 0.25 \
   -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode linear -learning_rate 1
 if {$lr_phase eq "sweep"} {
   foreach rate {0.5 0.75 1 1.25 1.5 2 3 4} {
     set tag [string map {. p} $rate]
     puts "LRBENCH phase=sweep rate=$rate iterations=200"
-    delgpu -gui 0 -backend gpu -max_iterations 200 -max_step 0.25 \
+    delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations 200 -max_step 0.25 \
       -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode linear -learning_rate $rate \
       -report [file join $lr_output sweep_lr_${tag}.csv]
   }
@@ -28,7 +28,7 @@ if {$lr_phase eq "sweep"} {
       lassign $pair rate end_rate
       set tag [string map {. p} ${rate}_${end_rate}_${iterations}]
       puts "LRBENCH phase=anneal rate=$rate end_rate=$end_rate iterations=$iterations"
-      delgpu -gui 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
+      delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
         -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode linear -learning_rate $rate \
         -learning_rate_end $end_rate -report [file join $lr_output anneal_${tag}.csv]
     }
@@ -43,7 +43,7 @@ if {$lr_phase eq "sweep"} {
       if {$end_rate eq ""} { set end_rate $rate }
       puts "LRBENCH phase=confirm name=$name rate=$rate end_rate=$end_rate iterations=$iterations sample=$sample"
       set started [clock microseconds]
-      delgpu -gui 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
+      delgpu -gui 0 -postprocess 0 -backend gpu -max_iterations $iterations -max_step 0.25 \
         -jump_offset_nm 35 -max_backtracks 0 -learning_rate_mode linear -learning_rate $rate \
         -learning_rate_end $end_rate \
         -report [file join $lr_output ${name}_${sample}.csv]

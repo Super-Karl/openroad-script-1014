@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cub/device/device_reduce.cuh>
 #include <limits>
@@ -387,6 +388,8 @@ TrimStats unpack(const Aggregate& a)
 }
 }  // namespace
 
+#include "Postprocess.cuh"
+
 class TrimOptimizer::Impl
 {
  public:
@@ -537,6 +540,7 @@ class TrimOptimizer::Impl
   }
   TrimStats step(double lambda)
   {
+    integer_positions.reset();
     check(cudaMemcpyAsync(previous.get(),
                           current,
                           positions.bytes(),
@@ -659,6 +663,7 @@ class TrimOptimizer::Impl
   Device<int> incident, component_edges, component_offsets, edge_components,
       active;
   Device<double> positions, previous, candidate, direction, prime;
+  std::unique_ptr<Device<int64_t>> integer_positions;
   Device<int> stalled, repaired;
   Device<Aggregate> work, summary, old;
   std::unique_ptr<Device<unsigned char>> temp;
@@ -730,6 +735,17 @@ TrimStats TrimOptimizer::step(double lambda, double learning_rate)
 std::vector<double> TrimOptimizer::displacementDbu()
 {
   std::vector<double> result(impl_->n);
+  if (impl_->integer_positions) {
+    std::vector<int64_t> exact(impl_->n);
+    check(cudaMemcpyAsync(exact.data(),
+                          impl_->integer_positions->get(),
+                          exact.size() * sizeof(int64_t),
+                          cudaMemcpyDeviceToHost,
+                          impl_->stream));
+    check(cudaStreamSynchronize(impl_->stream));
+    std::copy(exact.begin(), exact.end(), result.begin());
+    return result;
+  }
   check(cudaMemcpyAsync(result.data(),
                         impl_->current,
                         impl_->positions.bytes(),
@@ -741,6 +757,182 @@ std::vector<double> TrimOptimizer::displacementDbu()
   }
   return result;
 }
+PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
+                                             const PostprocessOptions& options)
+{
+  auto& p = *impl_;
+  if (graph.nodes.size() != static_cast<size_t>(p.n)
+      || graph.initial2.size() != static_cast<size_t>(p.e)
+      || graph.ranges.size() * sizeof(OptRange) != p.ranges.bytes()
+      || graph.color_nodes.size() != graph.nodes.size()
+      || graph.color_offsets.empty() || graph.color_offsets.front() != 0
+      || graph.color_offsets.back() != p.n || graph.tolerance2 <= 0
+      || options.max_sweeps < 0 || options.pair_rounds < 0
+      || options.retract_sweeps < 0) {
+    throw std::invalid_argument("Invalid exact postprocess graph or budget");
+  }
+  using Clock = std::chrono::steady_clock;
+  const auto begin = Clock::now();
+  Device<PostNode> nodes(graph.nodes.size());
+  Device<PostRange> ranges(graph.ranges.size());
+  Device<int64_t> initial(graph.initial2.size());
+  Device<int> order(graph.color_nodes.size()), flags(p.n), next_flags(p.n),
+      moves(1);
+  Device<post::Pair> candidates(p.e);
+  Device<PostprocessStats> work(p.n + p.e), summary(1);
+  nodes.upload(graph.nodes);
+  ranges.upload(graph.ranges);
+  initial.upload(graph.initial2);
+  order.upload(graph.color_nodes);
+  p.integer_positions = std::make_unique<Device<int64_t>>(p.n);
+  post::View v{nodes.get(),
+               p.nodes.get(),
+               p.edges.get(),
+               ranges.get(),
+               initial.get(),
+               p.incident.get(),
+               p.integer_positions->get(),
+               graph.tolerance2};
+  size_t temp_size = 0;
+  check(cub::DeviceReduce::Reduce(nullptr,
+                                  temp_size,
+                                  work.get(),
+                                  summary.get(),
+                                  p.n + p.e,
+                                  post::Sum{},
+                                  PostprocessStats{},
+                                  p.stream));
+  Device<unsigned char> temp(temp_size);
+  const auto stats = [&]() {
+    post::statistics<<<blocks(p.n + p.e), block_size, 0, p.stream>>>(
+        v, p.n, p.e, work.get());
+    check(cudaGetLastError());
+    check(cub::DeviceReduce::Reduce(temp.get(),
+                                    temp_size,
+                                    work.get(),
+                                    summary.get(),
+                                    p.n + p.e,
+                                    post::Sum{},
+                                    PostprocessStats{},
+                                    p.stream));
+    PostprocessStats s;
+    check(cudaMemcpyAsync(
+        &s, summary.get(), sizeof(s), cudaMemcpyDeviceToHost, p.stream));
+    check(cudaStreamSynchronize(p.stream));
+    return s;
+  };
+  const auto moved = [&]() {
+    int count = 0;
+    check(cudaGetLastError());
+    check(cudaMemcpyAsync(
+        &count, moves.get(), sizeof(count), cudaMemcpyDeviceToHost, p.stream));
+    check(cudaStreamSynchronize(p.stream));
+    return count;
+  };
+  const auto milliseconds = [](auto a, auto b) {
+    return std::chrono::duration<double, std::milli>(b - a).count();
+  };
+  PostprocessResult result;
+  post::quantize<<<blocks(p.n), block_size, 0, p.stream>>>(
+      nodes.get(), p.n, p.current, p.width, v.x);
+  result.quantized = stats();
+  const auto quantized = Clock::now();
+  result.quantize_ms = milliseconds(begin, quantized);
+  int* active = flags.get();
+  int* next = next_flags.get();
+  check(cudaMemsetAsync(active, 0, flags.bytes(), p.stream));
+  if (p.e) {
+    post::activate<<<blocks(p.e), block_size, 0, p.stream>>>(v, p.e, active);
+  }
+  const int colors = static_cast<int>(graph.color_offsets.size()) - 1;
+  for (int sweep = 0; sweep < options.max_sweeps; ++sweep) {
+    check(cudaMemsetAsync(next, 0, flags.bytes(), p.stream));
+    check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+    for (int c = 0; c < colors; ++c) {
+      const int l = graph.color_offsets[c], u = graph.color_offsets[c + 1];
+      if (l < u) {
+        post::singles<<<blocks(u - l), block_size, 0, p.stream>>>(
+            v, order.get(), l, u, active, next, moves.get());
+      }
+    }
+    const int singles = moved();
+    ++result.sweeps;
+    result.single_moves += singles;
+    if (singles) {
+      std::swap(active, next);
+      continue;
+    }
+    if (!p.e || result.pair_rounds >= options.pair_rounds) {
+      break;
+    }
+    post::pairCandidates<<<blocks(p.e), block_size, 0, p.stream>>>(
+        v, p.e, candidates.get());
+    post::commitPairs<<<p.component_count, 128, 0, p.stream>>>(
+        v,
+        candidates.get(),
+        p.component_edges.get(),
+        p.component_offsets.get(),
+        next,
+        moves.get());
+    const int pairs = moved();
+    ++result.pair_rounds;
+    result.pair_moves += pairs;
+    if (!pairs) {
+      break;
+    }
+    std::swap(active, next);
+  }
+  result.repaired = stats();
+  const auto repaired = Clock::now();
+  result.repair_ms = milliseconds(quantized, repaired);
+  for (int sweep = 0; sweep < options.retract_sweeps; ++sweep) {
+    check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+    for (int c = 0; c < colors; ++c) {
+      const int l = graph.color_offsets[c], u = graph.color_offsets[c + 1];
+      if (l < u) {
+        post::retract<<<blocks(u - l), block_size, 0, p.stream>>>(
+            v, order.get(), l, u, moves.get());
+      }
+    }
+    const int count = moved();
+    ++result.retract_sweeps;
+    result.retract_moves += count;
+    if (!count) {
+      break;
+    }
+  }
+  result.retracted = stats();
+  const auto objective = [](const PostprocessStats& s) {
+    return post::Score{s.remaining[0] + s.remaining[1] + s.remaining[2],
+                       s.violations[0] + s.violations[1] + s.violations[2],
+                       s.gap2,
+                       s.extent};
+  };
+  if (post::better(objective(result.quantized), objective(result.repaired))
+      || post::better(objective(result.repaired),
+                      objective(result.retracted))) {
+    throw std::runtime_error("GPU postprocess objective increased");
+  }
+  for (int type = 0; type < 3; ++type) {
+    if (result.retracted.violations[type] > result.repaired.violations[type]
+        || result.retracted.remaining[type] > result.repaired.remaining[type]) {
+      throw std::runtime_error("GPU retraction increased violations");
+    }
+  }
+  if (result.retracted.gap2 > result.repaired.gap2
+      || result.retracted.max_gap2 > result.repaired.max_gap2
+      || result.retracted.extent > result.repaired.extent) {
+    throw std::runtime_error("GPU retraction worsened geometry");
+  }
+  post::normalized<<<blocks(p.n), block_size, 0, p.stream>>>(
+      v.x, p.current, p.n, p.width);
+  check(cudaGetLastError());
+  check(cudaStreamSynchronize(p.stream));
+  const auto end = Clock::now();
+  result.retract_ms = milliseconds(repaired, end);
+  result.total_ms = milliseconds(begin, end);
+  return result;
+}
 size_t TrimOptimizer::deviceBytes() const
 {
   const auto& p = *impl_;
@@ -750,6 +942,7 @@ size_t TrimOptimizer::deviceBytes() const
          + p.active.bytes() + p.positions.bytes() + p.previous.bytes()
          + p.candidate.bytes() + p.direction.bytes() + p.prime.bytes()
          + p.stalled.bytes() + p.repaired.bytes() + p.work.bytes()
-         + p.summary.bytes() + p.old.bytes() + p.temp_size;
+         + p.summary.bytes() + p.old.bytes() + p.temp_size
+         + (p.integer_positions ? p.integer_positions->bytes() : 0);
 }
 }  // namespace delgpu

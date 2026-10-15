@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2026, The OpenROAD Authors
 
-sta::define_cmd_args "delgpu" {[-gui boolean] [-verify boolean] [-backend gpu|cpu] [-max_iterations iterations] [-max_step width_multiple] [-jump_offset_nm nanometers] [-max_backtracks retries] [-learning_rate scale] [-learning_rate_end scale] [-learning_rate_mode linear|adaptive] [-frame_ms milliseconds] [-report csv_file]}
+sta::define_cmd_args "delgpu" {[-gui boolean] [-verify boolean] [-backend gpu|cpu] [-max_iterations iterations] [-max_step width_multiple] [-jump_offset_nm nanometers] [-max_backtracks retries] [-learning_rate scale] [-learning_rate_end scale] [-learning_rate_mode linear|adaptive] [-postprocess boolean] [-post_sweeps rounds] [-post_pair_rounds rounds] [-post_retract_sweeps rounds] [-frame_ms milliseconds] [-report csv_file]}
 
 proc delgpu { args } {
-  sta::parse_key_args "delgpu" args keys {-gui -verify -backend -max_iterations -max_step -jump_offset_nm -max_backtracks -learning_rate -learning_rate_end -learning_rate_mode -frame_ms -report} flags {}
+  sta::parse_key_args "delgpu" args keys {-gui -verify -backend -max_iterations -max_step -jump_offset_nm -max_backtracks -learning_rate -learning_rate_end -learning_rate_mode -postprocess -post_sweeps -post_pair_rounds -post_retract_sweeps -frame_ms -report} flags {}
   sta::check_argc_eq0 "delgpu" $args
+  set postprocess 1
   set show 0
   set verify 0
   set backend gpu
-  foreach {key var} {-gui show -verify verify} {
+  foreach {key var} {-gui show -verify verify -postprocess postprocess} {
     if {[info exists keys($key)]} {
       if {![string is boolean -strict $keys($key)]} {
         error "delgpu: $key requires a boolean (0 or 1)"
@@ -32,9 +33,18 @@ proc delgpu { args } {
     set learning_rate 1.0
     set learning_rate_mode linear
   }
+  if {$backend eq "cpu"} {
+    if {[info exists keys(-postprocess)] && $postprocess} {
+      error "delgpu: -postprocess 1 requires -backend gpu"
+    }
+    set postprocess 0
+  }
+  set post_sweeps 24
+  set post_pair_rounds 8
+  set post_retract_sweeps 8
   set frame_ms 100
   set report ""
-  foreach {key var} {-max_iterations iterations -max_step max_step -jump_offset_nm jump_offset_nm -max_backtracks max_backtracks -learning_rate learning_rate -learning_rate_mode learning_rate_mode -frame_ms frame_ms -report report} {
+  foreach {key var} {-max_iterations iterations -max_step max_step -jump_offset_nm jump_offset_nm -max_backtracks max_backtracks -learning_rate learning_rate -learning_rate_mode learning_rate_mode -post_sweeps post_sweeps -post_pair_rounds post_pair_rounds -post_retract_sweeps post_retract_sweeps -frame_ms frame_ms -report report} {
     if {[info exists keys($key)]} { set $var $keys($key) }
   }
   if {$learning_rate_mode ni {linear adaptive}} {
@@ -51,7 +61,7 @@ proc delgpu { args } {
   if {$backend eq "cpu" && ([info exists keys(-learning_rate)] || [info exists keys(-learning_rate_end)] || [info exists keys(-learning_rate_mode)])} {
     error "delgpu: -learning_rate controls only GPU; CPU reference uses 1.0"
   }
-  foreach {key value} [list -max_iterations $iterations -frame_ms $frame_ms] {
+  foreach {key value} [list -max_iterations $iterations -frame_ms $frame_ms -post_sweeps $post_sweeps -post_pair_rounds $post_pair_rounds -post_retract_sweeps $post_retract_sweeps] {
     if {![string is integer -strict $value] || $value < 0 || $value > 2147483647} {
       error "delgpu: $key requires a nonnegative 32-bit integer"
     }
@@ -65,5 +75,5 @@ proc delgpu { args } {
     if {![info exists keys(-learning_rate_end)]} { set learning_rate_end [expr {min($learning_rate, 0.5)}] }
     if {$learning_rate_end > $learning_rate} { error "delgpu: adaptive learning_rate_end must not exceed learning_rate" }
   }
-  delgpu::run_cmd $show $verify [expr {$backend eq "gpu"}] $iterations $max_step $jump_offset_nm $frame_ms $report $max_backtracks $learning_rate $learning_rate_end $learning_rate_mode
+  delgpu::run_cmd $show $verify [expr {$backend eq "gpu"}] $iterations $max_step $jump_offset_nm $frame_ms $report $max_backtracks $learning_rate $learning_rate_end $learning_rate_mode $postprocess $post_sweeps $post_pair_rounds $post_retract_sweeps
 }

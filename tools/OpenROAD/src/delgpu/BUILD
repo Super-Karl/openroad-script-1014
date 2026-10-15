@@ -35,7 +35,7 @@ GPU_ONLY = select({
 
 cc_library(
     name = "gpu_api",
-    hdrs = ["include/delgpu/Gpu.h", "include/delgpu/Parameters.h", "include/delgpu/GraphCuda.h", "include/delgpu/TrimOptimizer.h"],
+    hdrs = ["include/delgpu/Gpu.h", "include/delgpu/Parameters.h", "include/delgpu/GraphCuda.h", "include/delgpu/TrimOptimizer.h", "include/delgpu/Postprocess.h"],
     includes = ["include"],
 )
 
@@ -86,6 +86,7 @@ genrule(
 
 cc_library(
     name = "graph_cuda",
+    hdrs = ["src/optimize/Postprocess.cuh"],
     srcs = [":graph_cuda_translation_unit", ":optimizer_cuda_translation_unit"],
     additional_compiler_inputs = [
         "@cuda_local//:compiler_inputs",
@@ -103,7 +104,7 @@ cc_library(
         "-include", "$(location //bazel/gpu:cuda_placement_new.h)",
     ],
     features = ["-layering_check", "-parse_headers"],
-    includes = ["include"],
+    includes = ["include", "src/optimize"],
     tags = ["manual"],
     target_compatible_with = GPU_ONLY,
     deps = [":gpu_api", "@cuda_local//:cudart"],
@@ -147,6 +148,7 @@ cc_library(
         "src/graph/Arcs.cpp",
         "src/graph/GraphGpu.cpp",
         "src/optimize/GpuAdapter.cpp",
+        "src/optimize/Postprocess.cpp",
         "src/optimize/RunOptimization.cpp",
         "src/optimize/RunOptimization.h",
         "src/optimize/Optimizer.cpp",
@@ -238,6 +240,7 @@ cc_test(
     srcs = [
         "test/GraphGpuTest.cpp",
         "test/GpuOptimizerTest.cpp",
+        "test/PostprocessTest.cpp",
         "test/OptimizerTest.cpp",
         "test/TrimGeometryTest.cpp",
         "test/DomainTest.cpp",

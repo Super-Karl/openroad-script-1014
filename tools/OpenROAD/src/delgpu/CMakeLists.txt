@@ -58,7 +58,7 @@ if(NOT DELGPU_STANDALONE)
   )
   target_sources(delgpu PRIVATE src/MakeDelGpu.cpp src/DelGpu.cpp src/GraphGraphics.cpp
     src/graph/BuildGraph.cpp src/graph/TrimGeometry.cpp src/graph/Vnodes.cpp
-    src/graph/Domains.cpp src/graph/Arcs.cpp src/graph/GraphGpu.cpp src/optimize/GpuAdapter.cpp src/optimize/RunOptimization.cpp
+    src/graph/Domains.cpp src/graph/Arcs.cpp src/graph/GraphGpu.cpp src/optimize/GpuAdapter.cpp src/optimize/Postprocess.cpp src/optimize/RunOptimization.cpp
     src/optimize/Optimizer.cpp src/optimize/StallRepair.cpp)
   target_include_directories(delgpu
     PUBLIC include

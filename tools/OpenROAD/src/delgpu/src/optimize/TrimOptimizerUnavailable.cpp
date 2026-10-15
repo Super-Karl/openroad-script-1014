@@ -35,6 +35,11 @@ TrimStats TrimOptimizer::step(double, double)
 {
   throw std::runtime_error("CUDA unavailable");
 }
+PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph&,
+                                             const PostprocessOptions&)
+{
+  throw std::runtime_error("CUDA unavailable");
+}
 std::vector<double> TrimOptimizer::displacementDbu()
 {
   throw std::runtime_error("CUDA unavailable");

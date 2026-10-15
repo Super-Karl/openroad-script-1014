@@ -31,7 +31,11 @@ class DelGpu
            int max_backtracks = kDefaultMaxBacktracks,
            double learning_rate = kDefaultLearningRate,
            double learning_rate_end = kDefaultLearningRateEnd,
-           const char* learning_rate_mode = kDefaultLearningRateMode);
+           const char* learning_rate_mode = kDefaultLearningRateMode,
+           bool postprocess = true,
+           int post_sweeps = 24,
+           int post_pair_rounds = 8,
+           int post_retract_sweeps = 8);
 
  private:
   odb::dbBlock* init();
