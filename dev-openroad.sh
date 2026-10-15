@@ -39,7 +39,8 @@ usage() {
 build/build-delgpu 的参数直接传给模块构建脚本；支持 --cpu。
 默认使用当前全部可用 CPU 线程（nproc），可通过 -- --jobs=N 覆盖。
 两种编译命令均默认启用 --//:platform=gui，保持宿主和模块配置一致。
-BAZEL 指定 Bazel 程序，OPENROAD_CUDA_PATH 或 CUDA_HOME 指定 CUDA 路径。
+BAZEL 指定 Bazel 程序；CUDA 优先使用 OPENROAD_CUDA_PATH、CUDA_HOME、CUDA_PATH，
+未设置时自动检查 nvcc、项目/工作区的 .tools 和 dependencies 以及常见安装目录。
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。

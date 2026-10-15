@@ -21,7 +21,9 @@ Build libdelgpu.so and OpenROAD with Bazel (CUDA by default).
   --             Pass remaining options to bazel build (e.g. --jobs=24).
 
 BAZEL selects the Bazel executable; otherwise use bazelisk or bazel.
-CUDA uses OPENROAD_CUDA_PATH, CUDA_HOME, or the toolkit detected from nvcc.
+CUDA uses OPENROAD_CUDA_PATH, CUDA_HOME, CUDA_PATH, nvcc, or a toolkit
+in a standard install or project-local .tools/dependencies directory.
+Explicit CUDA paths must point to a complete toolkit; invalid paths fail early.
 Module CUDA does not require the optional Kokkos placement backend.
 Outputs: bazel-bin/src/delgpu/libdelgpu.so and bazel-bin/openroad.
 HELP
@@ -47,18 +49,75 @@ if [[ $module_only == false ]]; then
 fi
 cuda_options=()
 if [[ $backend == cuda ]]; then
-  cuda_root=${OPENROAD_CUDA_PATH:-${CUDA_HOME:-}}
-  if [[ -z $cuda_root ]] && command -v nvcc >/dev/null 2>&1; then
-    # nvcc may be a wrapper; TOP reports the actual toolkit directory.
-    cuda_root=$(nvcc -v __delgpu_probe__.cu 2>&1 | sed -n 's/^#\$ TOP=//p' | head -n 1) || true
-    if [[ -n $cuda_root && -d $cuda_root ]]; then
-      cuda_root=$(cd -- "$cuda_root" && pwd)
-    else
-      cuda_root=$(dirname -- "$(dirname -- "$(readlink -f -- "$(command -v nvcc)")")")
+  cuda_toolkit_problem() {
+    local prefix=$1 required
+    for required in include/cuda.h include/cuda_runtime.h bin/ptxas bin/fatbinary; do
+      if [[ ! -r "$prefix/$required" ]]; then
+        printf 'missing %s' "$required"
+        return 1
+      fi
+    done
+    if [[ ! -x "$prefix/bin/ptxas" || ! -x "$prefix/bin/fatbinary" ]]; then
+      printf 'bin/ptxas and bin/fatbinary must be executable'
+      return 1
     fi
+    if ! compgen -G "$prefix/nvvm/libdevice/libdevice*.bc" >/dev/null; then
+      printf 'missing nvvm/libdevice/libdevice*.bc'
+      return 1
+    fi
+    if [[ ! -r "$prefix/lib64/libcudart.so" && ! -r "$prefix/lib/libcudart.so" ]]; then
+      printf 'missing lib64/libcudart.so or lib/libcudart.so'
+      return 1
+    fi
+  }
+
+  find_cuda_toolkit() {
+    local variable candidate problem nvcc_path nvcc_prefix search_root
+    for variable in OPENROAD_CUDA_PATH CUDA_HOME CUDA_PATH; do
+      candidate=${!variable:-}
+      if [[ -n $candidate ]]; then
+        if problem=$(cuda_toolkit_problem "$candidate"); then
+          (cd -- "$candidate" && pwd -P)
+          return
+        fi
+        printf 'Invalid CUDA toolkit: %s=%s (%s).\n' "$variable" "$candidate" "$problem" >&2
+        return 1
+      fi
+    done
+
+    if nvcc_path=$(command -v nvcc); then
+      # TOP also works when nvcc on PATH is a wrapper rather than a symlink.
+      nvcc_prefix=$("$nvcc_path" -v --dryrun -x cu /dev/null -o /dev/null 2>&1 \
+        | sed -n 's/^#\$ TOP=//p' | head -n 1) || true
+      for candidate in "$nvcc_prefix" "$(dirname -- "$(dirname -- "$(readlink -f -- "$nvcc_path")")")"; do
+        if [[ -n $candidate ]] && cuda_toolkit_problem "$candidate" >/dev/null; then
+          (cd -- "$candidate" && pwd -P)
+          return
+        fi
+      done
+    fi
+
+    # Search project, ORFS, workspace and user installs before system installs.
+    # Clang CUDA needs a toolkit but does not require nvcc to be on PATH.
+    for search_root in "$openroad_root" "$openroad_root/../.." "$openroad_root/../../.." \
+      "${HOME:-/nonexistent}" /usr/local /opt /opt/nvidia; do
+      for candidate in "$search_root"/cuda "$search_root"/cuda-* \
+        "$search_root"/.tools/cuda* "$search_root"/dependencies/cuda* \
+        "$search_root"/.local/opt/cuda*; do
+        if cuda_toolkit_problem "$candidate" >/dev/null; then
+          (cd -- "$candidate" && pwd -P)
+          return
+        fi
+      done
+    done
+    printf 'No complete CUDA toolkit found. Set OPENROAD_CUDA_PATH to a toolkit with headers, ptxas, fatbinary, libdevice and libcudart, or use --cpu.\n' >&2
+    return 1
+  }
+
+  if ! cuda_root=$(find_cuda_toolkit); then
+    exit 1
   fi
-  if [[ -n $cuda_root ]]; then
-    cuda_options+=("--repo_env=OPENROAD_CUDA_PATH=$cuda_root")
-  fi
+  printf '[INFO] Using CUDA toolkit: %s\n' "$cuda_root"
+  cuda_options+=("--repo_env=OPENROAD_CUDA_PATH=$cuda_root")
 fi
 exec "$bazel_bin" build "--jobs=$(nproc)" "--//src/delgpu:gpu=$backend" "${cuda_options[@]}" "$@" "${targets[@]}"

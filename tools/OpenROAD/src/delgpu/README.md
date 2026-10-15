@@ -123,7 +123,11 @@ Bazel 使用仓库的 Clang CUDA 编译能力和 `@cuda_local`，无需 Kokkos/K
 CUDA 工具包需包含 Runtime、CUB/CCCL、libdevice、ptxas/fatbinary 和 cuRAND 头文件
 （Clang 的 CUDA runtime wrapper 会包含 cuRAND 头）。默认嵌入 sm_75 SASS 和 PTX，
 新设备可由驱动 JIT；首次运行的 JIT 成本应与预热后性能区分。
-脚本通过 `OPENROAD_CUDA_PATH`/`CUDA_HOME` 或 `nvcc` 定位工具包。
+脚本依次检查 `OPENROAD_CUDA_PATH`、`CUDA_HOME`、`CUDA_PATH`、PATH 中的 `nvcc`，
+以及项目、ORFS、工作区的 `.tools/cuda*`、`dependencies/cuda*`、用户的
+`~/.local/opt/cuda*` 和 `/usr/local`、`/opt` 下的常见 CUDA 安装目录。
+无需将 `nvcc` 加入 PATH；会校验头文件、ptxas/fatbinary、libdevice 和 libcudart。
+显式指定的 CUDA 路径无效时直接报错，不静默改用另一个版本。
 无 CUDA 构建使用 `--cpu`，运行时选择 `-backend cpu`。
 CMake 配置也保留 CPU 和 CUDA 源文件及测试注册。
 

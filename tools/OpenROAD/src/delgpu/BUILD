@@ -6,6 +6,7 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_test")
 load(":host_headers.bzl", "host_headers")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("//bazel:tcl_encode_or.bzl", "tcl_encode")
@@ -231,6 +232,14 @@ tcl_wrap_cc(
     namespace_prefix = "delgpu",
     root_swig_src = "src/delgpu.i",
     swig_includes = ["..", "src"],
+)
+
+py_test(
+    name = "cuda_discovery_test",
+    size = "small",
+    srcs = ["test/cuda_discovery_test.py"],
+    args = ["$(location scripts/build.sh)"],
+    data = ["scripts/build.sh"],
 )
 
 exports_files(["README.md"])
