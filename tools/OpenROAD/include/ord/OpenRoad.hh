@@ -71,6 +71,12 @@ namespace exa {
 class Example;
 }
 
+#ifdef ENABLE_LEO
+namespace leo {
+class Leo;
+}
+#endif
+
 #ifdef ENABLE_DEL
 namespace del {
 class Del;
@@ -187,6 +193,9 @@ class OpenRoad
   tap::Tapcell* getTapcell() { return tapcell_; }
   mpl::MacroPlacer* getMacroPlacer() { return macro_placer_; }
   exa::Example* getExample() { return example_; }
+#ifdef ENABLE_LEO
+  leo::Leo* getLeo() { return leo_; }
+#endif
 #ifdef ENABLE_DEL
   del::Del* getDel() { return del_; }
 #endif
@@ -300,6 +309,9 @@ class OpenRoad
   ram::RamGen* ram_gen_ = nullptr;
   mpl::MacroPlacer* macro_placer_ = nullptr;
   exa::Example* example_ = nullptr;
+#ifdef ENABLE_LEO
+  leo::Leo* leo_ = nullptr;
+#endif
 #ifdef ENABLE_DEL
   del::Del* del_ = nullptr;
 #endif

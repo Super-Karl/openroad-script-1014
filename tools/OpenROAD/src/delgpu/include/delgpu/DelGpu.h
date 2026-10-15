@@ -19,6 +19,7 @@ class DelGpu
  public:
   explicit DelGpu(utl::Logger* logger);
 
+  // C++ end=0 selects the mode's default; Tcl accepts explicit end rates >0.
   void run(bool gui = false,
            bool verify = false,
            bool gpu = true,
@@ -27,7 +28,10 @@ class DelGpu
            double jump_offset_nm = kDefaultJumpOffsetNm,
            int frame_ms = 100,
            const char* report = "",
-           int max_backtracks = kDefaultMaxBacktracks);
+           int max_backtracks = kDefaultMaxBacktracks,
+           double learning_rate = kDefaultLearningRate,
+           double learning_rate_end = kDefaultLearningRateEnd,
+           const char* learning_rate_mode = kDefaultLearningRateMode);
 
  private:
   odb::dbBlock* init();

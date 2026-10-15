@@ -2,11 +2,13 @@
 // Copyright (c) 2026, The OpenROAD Authors
 #include "delgpu/DelGpu.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 
 #include "GraphGraphics.h"
 #include "delgpu/Gpu.h"
@@ -31,14 +33,39 @@ void DelGpu::run(bool gui,
                  double jump_offset_nm,
                  int frame_ms,
                  const char* report,
-                 int max_backtracks)
+                 int max_backtracks,
+                 double learning_rate,
+                 double learning_rate_end,
+                 const char* learning_rate_mode)
 {
   if (running_) {
     throw std::runtime_error("DELGPU is already running");
   }
+  const std::string mode = gpu ? (learning_rate_mode ? learning_rate_mode
+                                                     : kDefaultLearningRateMode)
+                               : "linear";
+  if (!gpu) {
+    learning_rate = learning_rate_end = 1.0;
+  }
+  if (mode != "linear" && mode != "adaptive") {
+    throw std::invalid_argument("Unknown DELGPU learning-rate mode");
+  }
+  if (learning_rate_end == 0) {
+    learning_rate_end
+        = mode == "adaptive" ? std::min(learning_rate, 0.5) : learning_rate;
+  }
+  if (mode == "adaptive" && (!gpu || learning_rate_end > learning_rate)) {
+    throw std::invalid_argument(
+        "Adaptive mode requires GPU and end <= initial rate");
+  }
   if (iterations < 0 || frame_ms < 0 || !std::isfinite(max_step)
       || max_step <= 0 || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
-      || max_backtracks < 0 || max_backtracks > 19) {
+      || max_backtracks < 0 || max_backtracks > 19
+      || !std::isfinite(learning_rate) || learning_rate <= 0
+      || !std::isfinite(max_step * learning_rate)
+      || max_step * learning_rate <= 0 || !std::isfinite(learning_rate_end)
+      || learning_rate_end <= 0 || !std::isfinite(max_step * learning_rate_end)
+      || max_step * learning_rate_end <= 0) {
     throw std::invalid_argument("Invalid DELGPU iteration parameters");
   }
   struct RunningGuard
@@ -56,13 +83,18 @@ void DelGpu::run(bool gui,
   }
   logger_->report(
       "DELGPU parameters: backend={} gui={} max_iterations={} max_step={}W "
-      "jump_offset_nm={} max_backtracks={}",
+      "jump_offset_nm={} max_backtracks={} learning_rate={} "
+      "effective_max_step={}W learning_rate_end={} learning_rate_mode={}",
       gpu ? "gpu" : "cpu",
       gui,
       iterations,
       max_step,
       jump_offset_nm,
-      gpu ? max_backtracks : 19);
+      gpu ? max_backtracks : 19,
+      gpu ? learning_rate : 1.0,
+      gpu ? max_step * learning_rate : max_step,
+      gpu ? learning_rate_end : 1.0,
+      mode);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -139,6 +171,9 @@ void DelGpu::run(bool gui,
                     frame_ms,
                     report == nullptr ? "" : report,
                     max_backtracks,
+                    learning_rate,
+                    learning_rate_end,
+                    mode,
                     logger_);
   }
 }

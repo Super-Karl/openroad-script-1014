@@ -33,6 +33,8 @@ GPU 默认不进行步长减半回溯；`--max-backtracks 0|7|19` 分别为零�
 delgpu -gui 1 -verify 1 -max_iterations 0 ;# 只建图、校验、显示
 delgpu -gui 0 -max_iterations 200        ;# GPU 建图和迭代，关闭显示
 delgpu -gui 0 -max_backtracks 19         ;# 保留 CPU 的完整回溯预算
+delgpu -gui 0 -max_iterations 150 -learning_rate 1.5 -learning_rate_end 1.0
+delgpu -gui 0 -max_iterations 150 -learning_rate_mode adaptive -learning_rate 1.5 -learning_rate_end 0.5
 delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 ```
 
@@ -48,10 +50,27 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 - `-max_backtracks`：仅 GPU，默认 `0`，不进行步长减半重试；范围 `0..19`。
   保留全层能量下降检查，初始方向失败后仍可尝试 CPU 的两种确定性扰动。
   `19` 对应 CPU 每种尝试最多 20 个候选步长；CPU 后端不接受该选项。
+- `-learning_rate`：仅 GPU，默认 `1`，独立于规则权重 lambda 的移动比例。
+  普通梯度步长和上限一起缩放：有效上限为 `max_step × learning_rate × W`，
+  最后仍强制裁剪到移动域；能量下降检查和 CPU 跳跃规则继续生效。
+- `-learning_rate_end`：末轮比例。默认 `linear` 模式下省略时与初值相同，为固定学习率；
+  设置后在本次预算内逐轮线性插值。`adaptive` 模式将它用作下限，省略时为
+  `min(初值, 0.5)`。单轮预算只使用初值。
+  学习率均要求有限正值，且与 `max_step` 的乘积必须有限且大于零。
+  它们只缩放普通梯度更新，不缩放停滞跳跃的 35nm 偏移。
+  启动脚本对应 `--learning-rate` 和 `--learning-rate-end`。
+- `-learning_rate_mode`：仅 GPU，默认 `linear`，可设 `adaptive`。
+  动态模式每层独立使用余弦递减上限；连续两轮梯度/扰动阶段没有接受候选时乘 0.8，
+  八轮内规则能量和 ≥5nm 数量均停滞时乘 0.85，直到达到下限。
+  比例只减不增，末轮达到下限；下限必须不超过初值。
+  直接使用已有统计，不增加候选或坐标下载。启动选项为 `--learning-rate-mode`。
 - `-frame_ms`：默认 100，GUI 中间快照的最小间隔；`0` 仅显示初态和最终快照。
   不逐轮复制坐标，不为刷新间隔额外 sleep；每个实际 GUI 更新只调用 `pause(1)` 处理事件。
 - `-report`：可选 CSV，记录每层初态、每轮及末态（`final`）；默认不写文件。
   最终显示和统计保留最后一轮，不恢复历史快照。
+  `learning_rate` 和 `effective_max_step_w` 列记录当轮实际学习率及梯度步长上限。
+  动态诊断列 `lr_feedback_reductions` 记录反馈降速次数，`rule_energy` 为不乘 lambda
+  的规则能量；`gradient_accepted` 在 GPU 后端区分梯度接受和仅成功跳跃。
 - `-backend`：默认 `gpu`，也支持 `cpu`。CPU 后端不初始化 CUDA；`-verify 1` 只用于 GPU。
 
 显示控制位于 `DELGPU/<层>`：`trims`、`vnodes`、`arcs/A`、`arcs/B`、`arcs/C`，
@@ -160,3 +179,9 @@ python3 tools/OpenROAD/src/delgpu/scripts/summarize_cpu_jump.py
 
 该实验预热 GPU 后交替测量 CPU、GPU 零次/七次/十九次减半重试，各三次。
 `DELGPU_BENCHMARK_DIR` 可覆盖输出目录，汇总脚本可接收同一个目录参数。
+
+学习率扫描及缩短预算的结果见 [学习率实验](doc/learning_rate_validation.md)。
+线性调度实验中，150 轮 1.5→1 得到 85 条 ≥5nm 违例。
+新的 [动态学习率实验](doc/adaptive_rate_validation.md) 中，150 轮 1.5→0.5 得到
+64 条，优化耗时中位数 1.917 秒，比固定 200 轮节省约 27.8%。
+这是当前设计的参数实验，默认仍为 200 轮、固定学习率 1；动态模式需显式启用。

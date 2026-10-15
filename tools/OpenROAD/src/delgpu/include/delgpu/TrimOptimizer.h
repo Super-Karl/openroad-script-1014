@@ -28,6 +28,7 @@ struct TrimStats
   unsigned long long moved = 0, repaired = 0;
   int candidates = 0;
   bool accepted = false;
+  bool gradient_accepted = false;
 };
 // Numeric arrays only; OpenDB and GUI stay in the host adapter.
 class TrimOptimizer
@@ -44,12 +45,14 @@ class TrimOptimizer
                 double tolerance_dbu,
                 double max_step,
                 double jump_offset_w,
-                int max_backtracks);
+                int max_backtracks,
+                double learning_rate);
   ~TrimOptimizer();
   TrimOptimizer(const TrimOptimizer&) = delete;
   TrimOptimizer& operator=(const TrimOptimizer&) = delete;
   TrimStats evaluate(double lambda);
   TrimStats step(double lambda);
+  TrimStats step(double lambda, double learning_rate);
   std::vector<double> displacementDbu();
   size_t deviceBytes() const;
 

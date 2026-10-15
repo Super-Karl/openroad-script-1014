@@ -20,5 +20,8 @@ void runOptimization(odb::dbBlock* block,
                      int frame_ms,
                      const std::string& report,
                      int max_backtracks,
+                     double learning_rate,
+                     double learning_rate_end,
+                     const std::string& learning_rate_mode,
                      utl::Logger* logger);
 }

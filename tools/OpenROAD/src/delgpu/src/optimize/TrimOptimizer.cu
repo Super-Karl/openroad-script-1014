@@ -213,6 +213,7 @@ __global__ void moveKernel(const OptNode* nodes,
                            const double* direction,
                            const Aggregate* old,
                            double max_step,
+                           double learning_rate,
                            int attempt,
                            int backtrack,
                            double width,
@@ -225,11 +226,13 @@ __global__ void moveKernel(const OptNode* nodes,
   const double scale
       = old->direction > max_step ? max_step / old->direction : 1;
   const double jitter = attempt ? ((i + attempt) % 2 == 0 ? 0.01 : -0.01) : 0;
-  const double step = ldexp(scale, -backtrack);
-  const double x = clamp(
-      prev[i] + clamp(step * (direction[i] + jitter), -max_step, max_step),
-      nodes[i].low,
-      nodes[i].up);
+  // Scale after normalization so rates >1 actually increase movement.
+  const double step = ldexp(scale * learning_rate, -backtrack);
+  const double cap = max_step * learning_rate;
+  const double x
+      = clamp(prev[i] + clamp(step * (direction[i] + jitter), -cap, cap),
+              nodes[i].low,
+              nodes[i].up);
   trial[i] = x;
   Aggregate a;
   a.energy = 0.01 * (hypot(x, 0.01) - 0.01);
@@ -398,13 +401,15 @@ class TrimOptimizer::Impl
        double tol,
        double step,
        double jump,
-       int retries)
+       int retries,
+       double rate)
       : n(static_cast<int>(hn.size())),
         e(static_cast<int>(he.size())),
         width(w),
         tolerance(tol),
         max_step(step),
         jump_offset(jump),
+        learning_rate(rate),
         max_backtracks(retries),
         component_count(static_cast<int>(offsets.size()) - 1),
         nodes(hn.size()),
@@ -428,7 +433,8 @@ class TrimOptimizer::Impl
   {
     if (n <= 0 || width <= 0 || !std::isfinite(width) || !std::isfinite(step)
         || step <= 0 || !std::isfinite(jump) || jump <= 0 || !std::isfinite(tol)
-        || tol <= 0 || retries < 0 || retries > 19) {
+        || tol <= 0 || retries < 0 || retries > 19 || !std::isfinite(rate)
+        || rate <= 0 || !std::isfinite(step * rate) || step * rate <= 0) {
       throw std::invalid_argument("Invalid GPU optimizer parameters");
     }
     for (const auto& node : hn) {
@@ -575,6 +581,7 @@ class TrimOptimizer::Impl
                                                          direction.get(),
                                                          old.get(),
                                                          max_step,
+                                                         learning_rate,
                                                          attempt,
                                                          backtrack,
                                                          width,
@@ -640,10 +647,11 @@ class TrimOptimizer::Impl
     auto stats = unpack(after);
     stats.candidates = candidates;
     stats.accepted = accepted || stats.repaired;
+    stats.gradient_accepted = accepted;
     return stats;
   }
   int n, e;
-  double width, tolerance, max_step, jump_offset;
+  double width, tolerance, max_step, jump_offset, learning_rate;
   int max_backtracks, component_count;
   Device<OptNode> nodes;
   Device<OptEdge> edges;
@@ -672,9 +680,21 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>& n,
                              double t,
                              double step,
                              double jump,
-                             int retries)
-    : impl_(std::make_unique<
-            Impl>(n, e, r, i, c, o, components, w, t, step, jump, retries))
+                             int retries,
+                             double rate)
+    : impl_(std::make_unique<Impl>(n,
+                                   e,
+                                   r,
+                                   i,
+                                   c,
+                                   o,
+                                   components,
+                                   w,
+                                   t,
+                                   step,
+                                   jump,
+                                   retries,
+                                   rate))
 {
 }
 TrimOptimizer::~TrimOptimizer() = default;
@@ -690,6 +710,21 @@ TrimStats TrimOptimizer::step(double lambda)
   if (!std::isfinite(lambda) || lambda <= 0) {
     throw std::invalid_argument("Invalid constraint weight");
   }
+  return impl_->step(lambda);
+}
+TrimStats TrimOptimizer::step(double lambda, double learning_rate)
+{
+  if (!std::isfinite(learning_rate) || learning_rate <= 0
+      || !std::isfinite(impl_->max_step * learning_rate)
+      || impl_->max_step * learning_rate <= 0) {
+    throw std::invalid_argument(
+        "Invalid GPU learning rate or effective step cap");
+  }
+  // Validate before changing the persistent rate.
+  if (!std::isfinite(lambda) || lambda <= 0) {
+    throw std::invalid_argument("Invalid constraint weight");
+  }
+  impl_->learning_rate = learning_rate;
   return impl_->step(lambda);
 }
 std::vector<double> TrimOptimizer::displacementDbu()

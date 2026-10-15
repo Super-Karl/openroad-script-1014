@@ -12,12 +12,19 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
                                                 double max_step,
                                                 double dbu_per_micron,
                                                 double jump_offset_nm,
-                                                int max_backtracks)
+                                                int max_backtracks,
+                                                double learning_rate)
 {
   const double width = layer.rules.width;
   if (!std::isfinite(dbu_per_micron) || dbu_per_micron <= 0
       || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0) {
     throw std::invalid_argument("Invalid GPU jump scale or offset");
+  }
+  if (!std::isfinite(learning_rate) || learning_rate <= 0
+      || !std::isfinite(max_step * learning_rate)
+      || max_step * learning_rate <= 0) {
+    throw std::invalid_argument(
+        "Invalid GPU learning rate or effective step cap");
   }
   if (width <= 0
       || layer.nodes.size() + layer.arcs.size()
@@ -123,7 +130,8 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
       tolerance_dbu,
       max_step,
       jump_offset_nm * dbu_per_micron / (1000.0 * width),
-      max_backtracks);
+      max_backtracks,
+      learning_rate);
 }
 
 TrimStats assessDisplacement(const LayerNodes& layer,

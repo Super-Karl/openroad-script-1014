@@ -6,9 +6,11 @@
 #include <fstream>
 #include <iomanip>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 
 #include "../GraphGraphics.h"
+#include "delgpu/AdaptiveLearningRate.h"
 #include "delgpu/GpuOptimizer.h"
 #include "delgpu/Optimizer.h"
 #include "odb/db.h"
@@ -53,6 +55,9 @@ void runOptimization(odb::dbBlock* block,
                      int frame_ms,
                      const std::string& report,
                      int max_backtracks,
+                     double learning_rate,
+                     double learning_rate_end,
+                     const std::string& learning_rate_mode,
                      utl::Logger* logger)
 {
   using Clock = std::chrono::steady_clock;
@@ -60,6 +65,8 @@ void runOptimization(odb::dbBlock* block,
   odb::dbBlockCallBackObj owner;
   owner.addOwner(block);
   const double tolerance = 5.0 * block->getDbUnitsPerMicron() / 1000.0;
+  double current_learning_rate = gpu ? learning_rate : 1.0;
+  int rate_reductions = 0;
   std::ofstream csv;
   if (!report.empty()) {
     csv.open(report);
@@ -67,7 +74,9 @@ void runOptimization(odb::dbBlock* block,
       throw std::runtime_error("Cannot open iteration report: " + report);
     }
     csv << "layer,stage,iteration,lambda,energy,conflicts,remaining_5nm,max_"
-           "gap_dbu,extent_dbu,candidates,repairs,elapsed_ms\n";
+           "gap_dbu,extent_dbu,candidates,repairs,elapsed_ms,learning_rate,"
+           "effective_max_step_w,gradient_accepted,lr_feedback_reductions,"
+           "rule_energy\n";
     csv << std::setprecision(12);
   }
   auto write = [&](const std::string& layer,
@@ -84,7 +93,9 @@ void runOptimization(odb::dbBlock* block,
     csv << layer << ',' << stage << ',' << i << ',' << lambda << ',' << s.energy
         << ',' << count(s) << ',' << remaining(s) << ',' << s.max_violation_dbu
         << ',' << s.extent_dbu << ',' << s.candidates << ',' << s.repaired
-        << ',' << elapsed << '\n';
+        << ',' << elapsed << ',' << current_learning_rate << ','
+        << max_step * current_learning_rate << ',' << s.gradient_accepted << ','
+        << rate_reductions << ',' << s.rule_energy << '\n';
     if (!csv) {
       throw std::runtime_error("Failed to write iteration report");
     }
@@ -108,7 +119,8 @@ void runOptimization(odb::dbBlock* block,
                                 max_step,
                                 block->getDbUnitsPerMicron(),
                                 jump_offset_nm,
-                                max_backtracks);
+                                max_backtracks,
+                                learning_rate);
     } else {
       cpu = std::make_unique<LayerOptimizer>(layer,
                                              tolerance,
@@ -117,7 +129,17 @@ void runOptimization(odb::dbBlock* block,
                                              max_step);
     }
     const auto ready = Clock::now();
+    current_learning_rate = gpu ? learning_rate : 1.0;
     auto stats = gpu ? device->evaluate(10) : convert(cpu->evaluate(10));
+    std::optional<AdaptiveLearningRate> adaptive;
+    if (gpu && learning_rate_mode == "adaptive") {
+      adaptive.emplace(learning_rate,
+                       learning_rate_end,
+                       iterations,
+                       stats.rule_energy,
+                       remaining(stats));
+    }
+    rate_reductions = 0;
     const auto initial_count = count(stats);
     initial_total += initial_count;
     write(layer.layer, "initial", 0, 10, stats);
@@ -127,7 +149,23 @@ void runOptimization(odb::dbBlock* block,
     for (int iteration = 1; iteration <= iterations && count(stats) > 0;
          ++iteration) {
       lambda = 10.0 * (1 << std::min(3, (iteration - 1) / 25));
-      stats = gpu ? device->step(lambda) : convert(cpu->step(lambda));
+      const double fraction
+          = iterations <= 1
+                ? 0.0
+                : static_cast<double>(iteration - 1) / (iterations - 1);
+      const double rate
+          = learning_rate == learning_rate_end
+                ? learning_rate
+                : (1 - fraction) * learning_rate + fraction * learning_rate_end;
+      current_learning_rate
+          = gpu ? (adaptive ? adaptive->rate(iteration) : rate) : 1.0;
+      stats = gpu ? device->step(lambda, current_learning_rate)
+                  : convert(cpu->step(lambda));
+      if (adaptive) {
+        adaptive->observe(
+            stats.rule_energy, remaining(stats), stats.gradient_accepted);
+        rate_reductions = adaptive->reductions();
+      }
       completed = iteration;
       total_candidates += stats.candidates;
       total_repairs += stats.repaired;
@@ -135,7 +173,8 @@ void runOptimization(odb::dbBlock* block,
       if (iteration % 25 == 0 || count(stats) == 0 || iteration == iterations) {
         logger->report(
             "DELGPU iteration: layer={} iter={} lambda={} conflicts={} "
-            "remaining_5nm={} max_gap_dbu={:.6f} candidates={} repairs={}",
+            "remaining_5nm={} max_gap_dbu={:.6f} candidates={} repairs={} "
+            "learning_rate={:.6f}",
             layer.layer,
             iteration,
             lambda,
@@ -143,7 +182,8 @@ void runOptimization(odb::dbBlock* block,
             remaining(stats),
             stats.max_violation_dbu,
             stats.candidates,
-            stats.repaired);
+            stats.repaired,
+            current_learning_rate);
       }
       if (gui && frame_ms > 0
           && std::chrono::duration<double, std::milli>(Clock::now()

@@ -154,6 +154,7 @@ cc_library(
     ],
     hdrs = [
         "include/delgpu/DelGpu.h",
+        "include/delgpu/AdaptiveLearningRate.h",
         "include/delgpu/Parameters.h",
         "include/delgpu/Graph.h",
         "include/delgpu/GraphGpu.h",

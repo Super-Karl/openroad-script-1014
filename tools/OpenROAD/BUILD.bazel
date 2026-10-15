@@ -110,6 +110,8 @@ OPENROAD_LIBRARY_DEPS = [
     "//src/grt:ui",
     "//src/ifp",
     "//src/ifp:ui",
+    "//src/leo",
+    "//src/leo:ui",
     "//src/mpl",
     "//src/mpl:ui",
     "//src/odb/src/3dblox",
@@ -333,7 +335,7 @@ cc_library(
         "include/ord/Tech.h",
         "include/ord/Timing.h",
     ],
-    defines = ["ENABLE_DELGPU", "ENABLE_DEL"],
+    defines = ["ENABLE_DELGPU", "ENABLE_DEL", "ENABLE_LEO"],
     includes = [
         "include",
     ],

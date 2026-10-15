@@ -43,6 +43,10 @@
 #include "est/MakeEstimateParasitics.h"
 #include "exa/MakeExample.h"
 #include "exa/example.h"
+#ifdef ENABLE_LEO
+#include "leo/Leo.h"
+#include "leo/MakeLeo.h"
+#endif
 #ifdef ENABLE_DEL
 #include "del/Del.h"
 #include "del/MakeDel.h"
@@ -146,6 +150,9 @@ OpenRoad::~OpenRoad()
   delete tapcell_;
   delete macro_placer_;
   delete example_;
+#ifdef ENABLE_LEO
+  delete leo_;
+#endif
 #ifdef ENABLE_DEL
   delete del_;
 #endif
@@ -290,6 +297,9 @@ void OpenRoad::init(Tcl_Interp* tcl_interp,
   icewall_ = new pad::ICeWall(db_, logger_);
   dft_ = new dft::Dft(db_, sta_, logger_);
   example_ = new exa::Example(db_, logger_);
+#ifdef ENABLE_LEO
+  leo_ = new leo::Leo(logger_);
+#endif
 #ifdef ENABLE_DEL
   del_ = new del::Del(logger_);
 #endif
@@ -326,6 +336,9 @@ void OpenRoad::init(Tcl_Interp* tcl_interp,
   tap::initTapcell(tcl_interp);
   mpl::initMacroPlacer(tcl_interp);
   exa::initExample(tcl_interp);
+#ifdef ENABLE_LEO
+  leo::initLeo(tcl_interp);
+#endif
 #ifdef ENABLE_DEL
   del::initDel(tcl_interp);
 #endif

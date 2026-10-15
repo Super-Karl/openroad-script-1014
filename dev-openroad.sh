@@ -18,7 +18,7 @@ usage() {
   build-delgpu   只编译 delgpu 共享库（首次使用请先 build）
   gui            启动 GUI，默认加载 asap7/ibex/base/5_2_route.odb
   graph          加载设计并建图，默认无界面；--gui 1 显示 trim 和边
-  optimize       建图并迭代优化，默认 200 轮、0.25W 步长、35nm 跳跃、无 GUI
+  optimize       建图并迭代优化，默认 150 轮、0.25W 步长、35nm 跳跃、动态学习率 1.5→0.5、无 GUI
   run            启动 Tcl 终端，或传入 OpenROAD 参数运行脚本
   help           显示帮助
 
@@ -32,7 +32,7 @@ usage() {
   ./dev-openroad.sh graph --gui 1 --verify 1
   ./dev-openroad.sh graph --gui 0
   ./dev-openroad.sh graph --gui 0 --backend cpu
-  ./dev-openroad.sh optimize --gui 0 --iterations 200 --report /tmp/delgpu.csv
+  ./dev-openroad.sh optimize --report /tmp/delgpu.csv
   ./dev-openroad.sh optimize --gui 1 --frame-ms 100
   ./dev-openroad.sh run -exit tools/OpenROAD/src/delgpu/scripts/open_route.tcl
 
@@ -43,7 +43,7 @@ BAZEL 指定 Bazel 程序，OPENROAD_CUDA_PATH 或 CUDA_HOME 指定 CUDA 路径�
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
-optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--max-backtracks 回溯重试次数（默认 0）、--frame-ms 刷新间隔、--report CSV。
+optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--frame-ms 刷新间隔、--report CSV。
 在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
 使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
@@ -86,15 +86,18 @@ case "$command_name" in
       graph_verify=0
       graph_backend=gpu
       graph_iterations=0
-      if [[ "$command_name" == optimize ]]; then graph_iterations=200; fi
+      if [[ "$command_name" == optimize ]]; then graph_iterations=150; fi
       graph_max_step=0.25
       graph_jump_offset_nm=35
+      graph_learning_rate_mode=
+      graph_learning_rate_end=
+      graph_learning_rate=
       graph_max_backtracks=
       graph_frame_ms=100
       graph_report=
       while (($#)); do
         case "$1" in
-          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--frame-ms|--report)
+          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--learning-rate|--learning-rate-end|--learning-rate-mode|--frame-ms|--report)
             (($# >= 2)) || fail "$1 后需要提供值"
             case "$1" in
               --db) graph_db=$2 ;;
@@ -105,6 +108,9 @@ case "$command_name" in
               --max-step) graph_max_step=$2 ;;
               --jump-offset-nm) graph_jump_offset_nm=$2 ;;
               --max-backtracks) graph_max_backtracks=$2 ;;
+              --learning-rate) graph_learning_rate=$2 ;;
+              --learning-rate-end) graph_learning_rate_end=$2 ;;
+              --learning-rate-mode) graph_learning_rate_mode=$2 ;;
               --frame-ms) graph_frame_ms=$2 ;;
               --report) graph_report=$2 ;;
             esac
@@ -125,6 +131,15 @@ case "$command_name" in
       export DELGPU_JUMP_OFFSET_NM="$graph_jump_offset_nm"
       if [[ -n "$graph_max_backtracks" ]]; then
         export DELGPU_MAX_BACKTRACKS="$graph_max_backtracks"
+      fi
+      if [[ -n "$graph_learning_rate" ]]; then
+        export DELGPU_LEARNING_RATE="$graph_learning_rate"
+      fi
+      if [[ -n "$graph_learning_rate_end" ]]; then
+        export DELGPU_LEARNING_RATE_END="$graph_learning_rate_end"
+      fi
+      if [[ -n "$graph_learning_rate_mode" ]]; then
+        export DELGPU_LEARNING_RATE_MODE="$graph_learning_rate_mode"
       fi
       export DELGPU_FRAME_MS="$graph_frame_ms" DELGPU_REPORT="$graph_report"
       launch_args=(-no_init -no_splash)

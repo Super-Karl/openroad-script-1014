@@ -12,7 +12,7 @@ set benchmark_wire_before [del::regular_wire_length_dbu_cmd]
 puts "BENCHMARK input=$benchmark_db regular_wire_length_dbu=$benchmark_wire_before"
 puts "BENCHMARK warmup: GPU CPU-compatible jumps, 19 retries"
 delgpu -gui 0 -backend gpu -max_iterations 200 -max_step 0.25 \
-  -jump_offset_nm 35 -max_backtracks 19
+  -jump_offset_nm 35 -max_backtracks 19 -learning_rate_mode linear -learning_rate 1
 for {set sample 1} {$sample <= 3} {incr sample} {
   foreach method {cpu gpu0 gpu7 gpu19} {
     set options [list -gui 0 -max_iterations 200 -max_step 0.25 -jump_offset_nm 35 \
@@ -20,7 +20,7 @@ for {set sample 1} {$sample <= 3} {incr sample} {
     if {$method eq "cpu"} {
       lappend options -backend cpu
     } else {
-      lappend options -backend gpu -max_backtracks [string range $method 3 end]
+      lappend options -backend gpu -learning_rate_mode linear -learning_rate 1 -max_backtracks [string range $method 3 end]
     }
     puts "BENCHMARK sample=$sample method=$method"
     set started [clock microseconds]

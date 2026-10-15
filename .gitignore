@@ -108,3 +108,4 @@ MODULE.bazel.lock
 # python venv
 venv/
 tmp/
+tools/OpenROAD/third-party/abc

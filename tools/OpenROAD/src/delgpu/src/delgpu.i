@@ -14,11 +14,11 @@ namespace delgpu {
 
 void run_cmd(bool gui, bool verify, bool gpu, int iterations,
              double max_step, double jump_offset_nm, int frame_ms, const char* report,
-             int max_backtracks)
+             int max_backtracks, double learning_rate, double learning_rate_end, const char* learning_rate_mode)
 {
   ord::OpenRoad::openRoad()->getDelGpu()->run(gui, verify, gpu, iterations,
                                            max_step, jump_offset_nm, frame_ms, report,
-                                           max_backtracks);
+                                           max_backtracks, learning_rate, learning_rate_end, learning_rate_mode);
 }
 
 }  // namespace delgpu
