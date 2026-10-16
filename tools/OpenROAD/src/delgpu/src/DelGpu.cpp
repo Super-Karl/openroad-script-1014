@@ -41,12 +41,20 @@ void DelGpu::run(bool gui,
                  int post_sweeps,
                  int post_pair_rounds,
                  int post_retract_sweeps,
-                 const char* post_retract_mode)
+                 const char* post_retract_mode,
+                 int post_joint_rounds,
+                 int post_joint_trials)
 {
   const std::string retract_mode
       = post_retract_mode ? post_retract_mode : "cooperative";
-  if (retract_mode != "single" && retract_mode != "cooperative") {
+  if (retract_mode != "single" && retract_mode != "cooperative"
+      && retract_mode != "ema" && retract_mode != "ema_jump"
+      && retract_mode != "ema_lpa") {
     throw std::invalid_argument("Unknown DELGPU retraction mode");
+  }
+  if (post_joint_rounds > 0 && (!gpu || !postprocess)) {
+    throw std::invalid_argument(
+        "DELGPU joint search requires GPU postprocessing");
   }
   if (running_) {
     throw std::runtime_error("DELGPU is already running");
@@ -69,8 +77,10 @@ void DelGpu::run(bool gui,
         "Adaptive mode requires GPU and end <= initial rate");
   }
   if (post_sweeps < 0 || post_pair_rounds < 0 || post_retract_sweeps < 0
-      || iterations < 0 || frame_ms < 0 || !std::isfinite(max_step)
-      || max_step <= 0 || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
+      || post_joint_rounds < 0 || post_joint_rounds > 64
+      || post_joint_trials < 2 || post_joint_trials > 64 || iterations < 0
+      || frame_ms < 0 || !std::isfinite(max_step) || max_step <= 0
+      || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
       || max_backtracks < 0 || max_backtracks > 19
       || !std::isfinite(learning_rate) || learning_rate <= 0
       || !std::isfinite(max_step * learning_rate)
@@ -108,12 +118,14 @@ void DelGpu::run(bool gui,
       mode);
   logger_->report(
       "DELGPU postprocess parameters: enabled={} sweeps={} pair_rounds={} "
-      "retract_sweeps={} retract_mode={}",
+      "retract_sweeps={} retract_mode={} joint_rounds={} joint_trials={}",
       gpu && postprocess,
       post_sweeps,
       post_pair_rounds,
       post_retract_sweeps,
-      retract_mode);
+      retract_mode,
+      post_joint_rounds,
+      post_joint_trials);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -194,10 +206,18 @@ void DelGpu::run(bool gui,
                     learning_rate_end,
                     mode,
                     gpu && postprocess,
-                    PostprocessOptions{post_sweeps,
-                                       post_pair_rounds,
-                                       post_retract_sweeps,
-                                       retract_mode == "cooperative"},
+                    PostprocessOptions{
+                        post_sweeps,
+                        post_pair_rounds,
+                        post_retract_sweeps,
+                        retract_mode == "cooperative",
+                        128,
+                        post_joint_rounds,
+                        post_joint_trials,
+                        retract_mode == "ema" || retract_mode == "ema_jump"
+                            || retract_mode == "ema_lpa",
+                        retract_mode == "ema_jump" || retract_mode == "ema_lpa",
+                        retract_mode == "ema_lpa"},
                     logger_);
   }
 }

@@ -1,0 +1,50 @@
+{
+  "continuous": {
+    "conflicts": 80193,
+    "remaining_5nm": 64,
+    "violations_lt5nm": 80129,
+    "extent_um": 2693.70898207216,
+    "max_gap_dbu": 45.0,
+    "sum_gap_dbu": null,
+    "iteration_ms": 1756.291,
+    "postprocess_ms": 0.0,
+    "total_ms": 1868.718,
+    "wall_ms": 2324.36
+  },
+  "quantized": {
+    "conflicts": 5169,
+    "remaining_5nm": 99,
+    "violations_lt5nm": 5070,
+    "extent_um": 2690.816,
+    "max_gap_dbu": 45.0,
+    "sum_gap_dbu": 7116.0,
+    "iteration_ms": 1758.166,
+    "postprocess_ms": 69.335,
+    "total_ms": 1984.574,
+    "wall_ms": 2432.708
+  },
+  "repaired": {
+    "conflicts": 84,
+    "remaining_5nm": 36,
+    "violations_lt5nm": 48,
+    "extent_um": 2754.178,
+    "max_gap_dbu": 16.0,
+    "sum_gap_dbu": 432.0,
+    "iteration_ms": 1742.463,
+    "postprocess_ms": 98.693,
+    "total_ms": 2041.086,
+    "wall_ms": 2510.234
+  },
+  "full": {
+    "conflicts": 84,
+    "remaining_5nm": 36,
+    "violations_lt5nm": 48,
+    "extent_um": 2632.331,
+    "max_gap_dbu": 16.0,
+    "sum_gap_dbu": 432.0,
+    "iteration_ms": 1760.565,
+    "postprocess_ms": 102.127,
+    "total_ms": 2000.836,
+    "wall_ms": 2455.702
+  }
+}

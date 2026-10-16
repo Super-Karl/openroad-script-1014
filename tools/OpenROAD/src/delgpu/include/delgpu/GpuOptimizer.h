@@ -5,7 +5,8 @@
 #include "delgpu/TrimOptimizer.h"
 namespace delgpu {
 PostprocessGraph makePostprocessGraph(const LayerNodes& layer,
-                                      int dbu_per_micron);
+                                      int dbu_per_micron,
+                                      bool joint_components = true);
 PostprocessStats assessIntegerDisplacement(
     const LayerNodes& layer,
     const std::vector<double>& displacement,

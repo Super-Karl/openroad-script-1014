@@ -8,6 +8,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include "delgpu/TrimOptimizer.h"
 
@@ -398,7 +399,7 @@ TrimStats unpack(const Aggregate& a)
 }
 }  // namespace
 
-#include "Postprocess.cuh"
+#include "EmaPostprocess.cuh"
 
 class TrimOptimizer::Impl
 {
@@ -821,7 +822,12 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
       || graph.color_offsets.empty() || graph.color_offsets.front() != 0
       || graph.color_offsets.back() != p.n || graph.tolerance2 <= 0
       || options.max_sweeps < 0 || options.pair_rounds < 0
-      || options.retract_sweeps < 0 || options.propagation_rounds < 0) {
+      || options.retract_sweeps < 0 || options.propagation_rounds < 0
+      || options.joint_rounds < 0 || options.joint_rounds > 64
+      || options.joint_trials < 2 || options.joint_trials > 64
+      || (options.joint_rounds
+          && p.component_count
+                 > std::numeric_limits<int>::max() / options.joint_trials)) {
     throw std::invalid_argument("Invalid exact postprocess graph or budget");
   }
   using Clock = std::chrono::steady_clock;
@@ -942,7 +948,8 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
   std::unique_ptr<Device<int64_t>> caps, next_caps;
   std::unique_ptr<Device<int>> invalid, parents, labels, heads, links;
   std::unique_ptr<Device<post::GroupMove>> group_candidates, group_selected;
-  if (options.cooperative_retract && options.retract_sweeps > 0) {
+  if (!options.ema_retract && options.cooperative_retract
+      && options.retract_sweeps > 0) {
     slack = std::make_unique<Device<post::Slack>>(p.e);
     caps = std::make_unique<Device<int64_t>>(p.n);
     next_caps = std::make_unique<Device<int64_t>>(p.n);
@@ -955,7 +962,8 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
     group_selected
         = std::make_unique<Device<post::GroupMove>>(p.component_count);
   }
-  for (int sweep = 0; sweep < options.retract_sweeps; ++sweep) {
+  for (int sweep = 0; !options.ema_retract && sweep < options.retract_sweeps;
+       ++sweep) {
     check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
     for (int c = 0; c < colors; ++c) {
       const int l = graph.color_offsets[c], u = graph.color_offsets[c + 1];
@@ -1058,6 +1066,99 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
       break;
     }
   }
+  if (options.ema_retract && options.retract_sweeps) {
+    if (graph.component_offsets.size() != size_t(p.component_count + 1)
+        || graph.component_offsets.back()
+               != int(graph.component_nodes.size())) {
+      throw std::invalid_argument("Invalid EMA component metadata");
+    }
+    Device<int> cn(graph.component_nodes.size()),
+        co(graph.component_offsets.size()), member(p.n),
+        queue(graph.component_nodes.size());
+    Device<unsigned long long> counters(6);
+    cn.upload(graph.component_nodes);
+    co.upload(graph.component_offsets);
+    check(cudaMemsetAsync(member.get(), 0, member.bytes(), p.stream));
+    check(cudaMemsetAsync(counters.get(), 0, counters.bytes(), p.stream));
+    post::emaIsolated<<<blocks(p.n), block_size, 0, p.stream>>>(v, p.n);
+    if (p.component_count) {
+      post::
+          emaComponents<<<blocks(p.component_count), block_size, 0, p.stream>>>(
+              v,
+              cn.get(),
+              co.get(),
+              p.component_count,
+              options.retract_sweeps,
+              options.ema_jumps,
+              member.get(),
+              queue.get(),
+              counters.get(),
+              nullptr);
+      if (options.ema_seed) {
+        Device<int64_t> before(p.n), lower(p.n), upper(p.n), keys(p.e);
+        Device<post::Slack> bounds(p.e);
+        Device<int> chosen(p.e), edge_order(p.e), active(p.component_count);
+        check(cudaMemcpyAsync(before.get(),
+                              v.x,
+                              before.bytes(),
+                              cudaMemcpyDeviceToDevice,
+                              p.stream));
+        const post::JointComponents components{cn.get(),
+                                               co.get(),
+                                               nullptr,
+                                               p.component_edges.get(),
+                                               p.component_offsets.get()};
+        post::emaSeed<<<blocks(p.component_count), block_size, 0, p.stream>>>(
+            v,
+            components,
+            p.component_count,
+            bounds.get(),
+            chosen.get(),
+            edge_order.get(),
+            keys.get(),
+            lower.get(),
+            upper.get(),
+            active.get(),
+            counters.get());
+        check(cudaMemsetAsync(member.get(), 0, member.bytes(), p.stream));
+        post::emaComponents<<<blocks(p.component_count),
+                              block_size,
+                              0,
+                              p.stream>>>(v,
+                                          cn.get(),
+                                          co.get(),
+                                          p.component_count,
+                                          options.retract_sweeps,
+                                          options.ema_jumps,
+                                          member.get(),
+                                          queue.get(),
+                                          counters.get(),
+                                          active.get());
+        post::emaSelect<<<blocks(p.component_count), block_size, 0, p.stream>>>(
+            v,
+            before.get(),
+            components,
+            p.component_count,
+            active.get(),
+            counters.get());
+      }
+    }
+    check(cudaGetLastError());
+    unsigned long long counts[6]{};
+    check(cudaMemcpyAsync(counts,
+                          counters.get(),
+                          sizeof(counts),
+                          cudaMemcpyDeviceToHost,
+                          p.stream));
+    check(cudaStreamSynchronize(p.stream));
+    result.ema_moves = counts[0];
+    result.ema_pivots = counts[1];
+    result.ema_jumps = counts[2];
+    result.ema_budget_reached = counts[3];
+    result.ema_seed_feasible = counts[4];
+    result.ema_seed_accepted = counts[5];
+    result.retract_moves = result.ema_moves;
+  }
   result.retracted = stats();
   const auto objective = [](const PostprocessStats& s) {
     return post::Score{s.remaining[0] + s.remaining[1] + s.remaining[2],
@@ -1081,12 +1182,167 @@ PostprocessResult TrimOptimizer::postprocess(const PostprocessGraph& graph,
       || result.retracted.extent > result.repaired.extent) {
     throw std::runtime_error("GPU retraction worsened geometry");
   }
+  result.joint = result.retracted;
+  const auto joint_begin = Clock::now();
+  if (options.joint_rounds && p.component_count) {
+    if (graph.component_offsets.size() != size_t(p.component_count + 1)
+        || graph.node_local.size() != size_t(p.n)
+        || graph.component_edge_counts.size() != size_t(p.component_count)) {
+      throw std::invalid_argument("Invalid joint component metadata");
+    }
+    Device<int> cn(graph.component_nodes.size()),
+        co(graph.component_offsets.size()), local(graph.node_local.size());
+    cn.upload(graph.component_nodes);
+    co.upload(graph.component_offsets);
+    local.upload(graph.node_local);
+    post::JointComponents components{cn.get(),
+                                     co.get(),
+                                     local.get(),
+                                     p.component_edges.get(),
+                                     p.component_offsets.get()};
+    Device<int64_t> positions(size_t(options.joint_trials) * p.n);
+    Device<post::JointCandidate> trials(size_t(options.joint_trials)
+                                        * p.component_count);
+    std::vector<int> buckets[4];
+    const int node_limits[]{16, 32, 64, 128}, edge_limits[]{64, 128, 256, 512};
+    // Report actual neighborhood coverage without downloading coordinates.
+    for (int c = 0; c < p.component_count; ++c) {
+      const int size
+          = graph.component_offsets[c + 1] - graph.component_offsets[c];
+      int bucket = 0;
+      while (bucket < 4
+             && (size > node_limits[bucket]
+                 || graph.component_edge_counts[c] > edge_limits[bucket])) {
+        ++bucket;
+      }
+      if (bucket < 4) {
+        buckets[bucket].push_back(c);
+        ++result.joint_eligible;
+      } else {
+        ++result.joint_skipped;
+      }
+    }
+    std::vector<int> batch_ids;
+    int batch_offsets[5]{};
+    for (int i = 0; i < 4; ++i) {
+      batch_ids.insert(batch_ids.end(), buckets[i].begin(), buckets[i].end());
+      batch_offsets[i + 1] = batch_ids.size();
+    }
+    Device<int> batches(batch_ids.size());
+    batches.upload(batch_ids);
+    Device<int> bound_counters(3), done(p.component_count);
+    check(cudaMemsetAsync(done.get(), 0, done.bytes(), p.stream));
+    check(cudaMemsetAsync(
+        bound_counters.get(), 0, bound_counters.bytes(), p.stream));
+    for (int round = 0; round < options.joint_rounds; ++round) {
+      check(cudaMemsetAsync(moves.get(), 0, moves.bytes(), p.stream));
+      check(cudaMemsetAsync(trials.get(), 0, trials.bytes(), p.stream));
+      const auto launch = [&](int bucket, auto node_limit, auto edge_limit) {
+        const int count = batch_offsets[bucket + 1] - batch_offsets[bucket];
+        if (!count) {
+          return;
+        }
+        post::jointCandidates<decltype(node_limit)::value,
+                              decltype(edge_limit)::value>
+            <<<(count * options.joint_trials + 127) / 128, 128, 0, p.stream>>>(
+                v,
+                components,
+                batches.get() + batch_offsets[bucket],
+                count,
+                p.n,
+                options.joint_trials,
+                round,
+                done.get(),
+                positions.get(),
+                trials.get());
+      };
+      // Common small components use compact workspaces; only larger buckets
+      // pay for wider network arrays. No large-workspace jobs for small graphs.
+      launch(0,
+             std::integral_constant<int, 16>{},
+             std::integral_constant<int, 64>{});
+      launch(1,
+             std::integral_constant<int, 32>{},
+             std::integral_constant<int, 128>{});
+      launch(2,
+             std::integral_constant<int, 64>{},
+             std::integral_constant<int, 256>{});
+      launch(3,
+             std::integral_constant<int, 128>{},
+             std::integral_constant<int, 512>{});
+      if (options.joint_trials >= 4) {
+        const auto bound = [&](int bucket, auto node_limit, auto edge_limit) {
+          const int count = batch_offsets[bucket + 1] - batch_offsets[bucket];
+          if (!count) {
+            return;
+          }
+          post::jointBound<decltype(node_limit)::value,
+                           decltype(edge_limit)::value>
+              <<<count, 32, 0, p.stream>>>(
+                  v,
+                  components,
+                  batches.get() + batch_offsets[bucket],
+                  count,
+                  p.n,
+                  options.joint_trials,
+                  positions.get(),
+                  trials.get(),
+                  bound_counters.get(),
+                  done.get());
+        };
+        bound(0,
+              std::integral_constant<int, 16>{},
+              std::integral_constant<int, 64>{});
+        bound(1,
+              std::integral_constant<int, 32>{},
+              std::integral_constant<int, 128>{});
+        bound(2,
+              std::integral_constant<int, 64>{},
+              std::integral_constant<int, 256>{});
+        bound(3,
+              std::integral_constant<int, 128>{},
+              std::integral_constant<int, 512>{});
+      }
+      post::commitJoint<<<blocks(p.component_count), block_size, 0, p.stream>>>(
+          v,
+          components,
+          p.component_count,
+          p.n,
+          options.joint_trials,
+          positions.get(),
+          trials.get(),
+          moves.get());
+      const int count = moved();
+      ++result.joint_rounds;
+      result.joint_moves += count;
+      // Later batches can contain different branch flips, so a no-move batch
+      // alone does not prove convergence and must not terminate the search.
+    }
+    int counters[3]{};
+    check(cudaMemcpyAsync(counters,
+                          bound_counters.get(),
+                          sizeof(counters),
+                          cudaMemcpyDeviceToHost,
+                          p.stream));
+    result.joint = stats();
+    result.joint_bound_solves = counters[0];
+    result.joint_bound_complete = counters[1];
+    result.joint_bound_limited = counters[2];
+    if (post::better(objective(result.retracted), objective(result.joint))
+        || result.joint.extent > result.retracted.extent
+        || result.joint.gap2 > result.retracted.gap2
+        || result.joint.max_gap2 > result.retracted.max_gap2) {
+      throw std::runtime_error("GPU joint search worsened geometry");
+    }
+  }
+  check(cudaStreamSynchronize(p.stream));
+  result.joint_ms = milliseconds(joint_begin, Clock::now());
   post::normalized<<<blocks(p.n), block_size, 0, p.stream>>>(
       v.x, p.current, p.n, p.width);
   check(cudaGetLastError());
   check(cudaStreamSynchronize(p.stream));
   const auto end = Clock::now();
-  result.retract_ms = milliseconds(repaired, end);
+  result.retract_ms = milliseconds(repaired, joint_begin);
   result.total_ms = milliseconds(begin, end);
   return result;
 }

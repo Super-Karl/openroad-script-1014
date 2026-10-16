@@ -1,0 +1,209 @@
+This plugin does not support propagateSizeHints()
+OpenROAD bazel-nostamp 
+Features included (+) or not (-): -GPU +GUI -Python
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+Components of this program may be licensed under more restrictive licenses which must be honored.
+[WARNING ORD-0012] Hierarchical flow (-hier) is currently in development and may cause multiple issues. Do not use in production environments.
+DELGPU parameters: backend=gpu gui=true max_iterations=0 max_step=0.25W jump_offset_nm=35 max_backtracks=0 learning_rate=1.5 effective_max_step=0.375W learning_rate_end=0.5 learning_rate_mode=adaptive
+DELGPU postprocess parameters: enabled=true sweeps=24 pair_rounds=8 retract_sweeps=8 retract_mode=cooperative
+DELGPU init: design=ibex_core insts=21425 nets=21367 pins=112970 (iterms=112704, bterms=266) routed_nets=21274 special_wire_objects=2 special_wire_boxes=16319 routing_layers=10 route_layer_range=[2,7] dbu_per_micron=1000
+DELGPU die: bounds=(0.000,0.000)-(76.726,76.726) um size=76.726x76.726 um
+GPU 0: NVIDIA GeForce RTX 5060 Laptop GPU
+GPU memory: 7.96 GiB
+Compute capability: 12.0
+Streaming multiprocessors: 26
+CUDA driver/runtime: 13.1/12.9
+gpu ready
+DELGPU graph: layer=M2 trims=159445 nodes=159445 obstacles=252107 blocked=0 A=63541 B=55950 C=161930 arcs=281421
+DELGPU timing (ms): layer=M2 geometry_cpu=127.033 domains_arcs_gpu=84.040 verify=0.000
+DELGPU graph: layer=M3 trims=109940 nodes=109940 obstacles=194305 blocked=0 A=11451 B=25735 C=72845 arcs=110031
+DELGPU timing (ms): layer=M3 geometry_cpu=88.735 domains_arcs_gpu=48.931 verify=0.000
+DELGPU graph: layer=M4 trims=29577 nodes=29577 obstacles=54502 blocked=0 A=4873 B=4051 C=12380 arcs=21304
+DELGPU timing (ms): layer=M4 geometry_cpu=37.376 domains_arcs_gpu=11.533 verify=0.000
+DELGPU graph: layer=M5 trims=16360 nodes=16360 obstacles=29599 blocked=0 A=4596 B=2017 C=5587 arcs=12200
+DELGPU timing (ms): layer=M5 geometry_cpu=25.788 domains_arcs_gpu=6.269 verify=0.000
+DELGPU graph: layer=M6 trims=12435 nodes=12435 obstacles=21380 blocked=0 A=2893 B=2628 C=5609 arcs=11130
+DELGPU timing (ms): layer=M6 geometry_cpu=22.757 domains_arcs_gpu=4.825 verify=0.000
+DELGPU graph: layer=M7 trims=4907 nodes=4907 obstacles=8666 blocked=0 A=0 B=333 C=941 arcs=1274
+DELGPU timing (ms): layer=M7 geometry_cpu=17.821 domains_arcs_gpu=2.388 verify=0.000
+DELGPU complete: backend=gpu gui=true verify=false layers=6 nodes=332664 arcs=437360 build_ms=491.090 display_ms=0.108
+DELGPU parameters: backend=gpu gui=true max_iterations=150 max_step=0.25W jump_offset_nm=35 max_backtracks=0 learning_rate=1.5 effective_max_step=0.375W learning_rate_end=0.5 learning_rate_mode=adaptive
+DELGPU postprocess parameters: enabled=false sweeps=24 pair_rounds=8 retract_sweeps=8 retract_mode=cooperative
+DELGPU init: design=ibex_core insts=21425 nets=21367 pins=112970 (iterms=112704, bterms=266) routed_nets=21274 special_wire_objects=2 special_wire_boxes=16319 routing_layers=10 route_layer_range=[2,7] dbu_per_micron=1000
+DELGPU die: bounds=(0.000,0.000)-(76.726,76.726) um size=76.726x76.726 um
+GPU 0: NVIDIA GeForce RTX 5060 Laptop GPU
+GPU memory: 7.96 GiB
+Compute capability: 12.0
+Streaming multiprocessors: 26
+CUDA driver/runtime: 13.1/12.9
+gpu ready
+DELGPU graph: layer=M2 trims=159445 nodes=159445 obstacles=252107 blocked=0 A=63541 B=55950 C=161930 arcs=281421
+DELGPU timing (ms): layer=M2 geometry_cpu=112.429 domains_arcs_gpu=67.383 verify=0.000
+DELGPU graph: layer=M3 trims=109940 nodes=109940 obstacles=194305 blocked=0 A=11451 B=25735 C=72845 arcs=110031
+DELGPU timing (ms): layer=M3 geometry_cpu=83.697 domains_arcs_gpu=43.406 verify=0.000
+DELGPU graph: layer=M4 trims=29577 nodes=29577 obstacles=54502 blocked=0 A=4873 B=4051 C=12380 arcs=21304
+DELGPU timing (ms): layer=M4 geometry_cpu=36.425 domains_arcs_gpu=10.617 verify=0.000
+DELGPU graph: layer=M5 trims=16360 nodes=16360 obstacles=29599 blocked=0 A=4596 B=2017 C=5587 arcs=12200
+DELGPU timing (ms): layer=M5 geometry_cpu=24.907 domains_arcs_gpu=6.040 verify=0.000
+DELGPU graph: layer=M6 trims=12435 nodes=12435 obstacles=21380 blocked=0 A=2893 B=2628 C=5609 arcs=11130
+DELGPU timing (ms): layer=M6 geometry_cpu=22.772 domains_arcs_gpu=4.841 verify=0.000
+DELGPU graph: layer=M7 trims=4907 nodes=4907 obstacles=8666 blocked=0 A=0 B=333 C=941 arcs=1274
+DELGPU timing (ms): layer=M7 geometry_cpu=17.500 domains_arcs_gpu=2.141 verify=0.000
+DELGPU complete: backend=gpu gui=true verify=false layers=6 nodes=332664 arcs=437360 build_ms=447.023 display_ms=36.361
+DELGPU iteration: layer=M2 iter=25 lambda=10 conflicts=59297 remaining_5nm=3092 max_gap_dbu=44.959191 candidates=1 repairs=62 learning_rate=1.437338
+DELGPU iteration: layer=M2 iter=50 lambda=20 conflicts=55882 remaining_5nm=286 max_gap_dbu=44.687670 candidates=1 repairs=2 learning_rate=1.256062
+DELGPU iteration: layer=M2 iter=75 lambda=40 conflicts=53967 remaining_5nm=161 max_gap_dbu=44.607659 candidates=1 repairs=1 learning_rate=1.005271
+DELGPU iteration: layer=M2 iter=100 lambda=80 conflicts=53245 remaining_5nm=107 max_gap_dbu=41.929204 candidates=1 repairs=0 learning_rate=0.753049
+DELGPU iteration: layer=M2 iter=125 lambda=80 conflicts=52528 remaining_5nm=79 max_gap_dbu=38.204428 candidates=1 repairs=1 learning_rate=0.567868
+DELGPU iteration: layer=M2 iter=150 lambda=80 conflicts=53157 remaining_5nm=46 max_gap_dbu=22.004756 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M2 iterations=150 initial_conflicts=70415 final_conflicts=53157 remaining_5nm=46 violations_lt5nm=53111 max_gap_dbu=22.004756 extent_um=1840.107589 wire_extension_um=1840.107589 setup_ms=79.996 iterate_ms=857.269 postprocess_ms=0.000 check_ms=5.414 device_mib=90.21
+DELGPU iteration: layer=M3 iter=25 lambda=10 conflicts=17897 remaining_5nm=293 max_gap_dbu=44.000000 candidates=1 repairs=27 learning_rate=1.437338
+DELGPU iteration: layer=M3 iter=50 lambda=20 conflicts=17807 remaining_5nm=48 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=1.026157
+DELGPU iteration: layer=M3 iter=75 lambda=40 conflicts=17695 remaining_5nm=11 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.525392
+DELGPU iteration: layer=M3 iter=100 lambda=80 conflicts=17598 remaining_5nm=10 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M3 iter=125 lambda=80 conflicts=17664 remaining_5nm=15 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M3 iter=150 lambda=80 conflicts=17574 remaining_5nm=11 max_gap_dbu=44.000000 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M3 iterations=150 initial_conflicts=20140 final_conflicts=17574 remaining_5nm=11 violations_lt5nm=17563 max_gap_dbu=44.000000 extent_um=506.378985 wire_extension_um=506.378985 setup_ms=22.899 iterate_ms=414.337 postprocess_ms=0.000 check_ms=2.709 device_mib=43.54
+DELGPU iteration: layer=M4 iter=25 lambda=10 conflicts=3338 remaining_5nm=20 max_gap_dbu=51.976335 candidates=1 repairs=0 learning_rate=1.171537
+DELGPU iteration: layer=M4 iter=50 lambda=20 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=75 lambda=40 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=100 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=125 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=150 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M4 iterations=150 initial_conflicts=5771 final_conflicts=3449 remaining_5nm=1 violations_lt5nm=3448 max_gap_dbu=7.850719 extent_um=115.494481 wire_extension_um=115.494481 setup_ms=5.592 iterate_ms=176.716 postprocess_ms=0.000 check_ms=0.992 device_mib=9.70
+DELGPU iteration: layer=M5 iter=25 lambda=10 conflicts=2849 remaining_5nm=15 max_gap_dbu=51.754741 candidates=1 repairs=0 learning_rate=1.168330
+DELGPU iteration: layer=M5 iter=50 lambda=20 conflicts=2869 remaining_5nm=1 max_gap_dbu=5.234107 candidates=3 repairs=0 learning_rate=0.598185
+DELGPU iteration: layer=M5 iter=75 lambda=40 conflicts=2864 remaining_5nm=0 max_gap_dbu=1.856430 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=100 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=125 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=150 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M5 iterations=150 initial_conflicts=4552 final_conflicts=2861 remaining_5nm=0 violations_lt5nm=2861 max_gap_dbu=1.709493 extent_um=70.838482 wire_extension_um=70.838482 setup_ms=4.655 iterate_ms=120.115 postprocess_ms=0.000 check_ms=0.567 device_mib=5.40
+DELGPU iteration: layer=M6 iter=25 lambda=10 conflicts=3095 remaining_5nm=147 max_gap_dbu=79.864529 candidates=1 repairs=6 learning_rate=1.437338
+DELGPU iteration: layer=M6 iter=50 lambda=20 conflicts=3013 remaining_5nm=50 max_gap_dbu=75.488416 candidates=1 repairs=1 learning_rate=1.012047
+DELGPU iteration: layer=M6 iter=75 lambda=40 conflicts=2998 remaining_5nm=13 max_gap_dbu=47.345749 candidates=1 repairs=0 learning_rate=0.647710
+DELGPU iteration: layer=M6 iter=100 lambda=80 conflicts=2984 remaining_5nm=7 max_gap_dbu=44.077972 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M6 iter=125 lambda=80 conflicts=2973 remaining_5nm=6 max_gap_dbu=45.000000 candidates=3 repairs=1 learning_rate=0.500000
+DELGPU iteration: layer=M6 iter=150 lambda=80 conflicts=2973 remaining_5nm=6 max_gap_dbu=45.000000 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M6 iterations=150 initial_conflicts=3590 final_conflicts=2973 remaining_5nm=6 violations_lt5nm=2967 max_gap_dbu=45.000000 extent_um=150.971217 wire_extension_um=150.971217 setup_ms=4.770 iterate_ms=153.231 postprocess_ms=0.000 check_ms=0.836 device_mib=4.56
+DELGPU iteration: layer=M7 iter=25 lambda=10 conflicts=183 remaining_5nm=2 max_gap_dbu=8.968549 candidates=1 repairs=0 learning_rate=0.612173
+DELGPU iteration: layer=M7 iter=50 lambda=20 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=75 lambda=40 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=100 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=125 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=150 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU optimization: layer=M7 iterations=150 initial_conflicts=189 final_conflicts=179 remaining_5nm=0 violations_lt5nm=179 max_gap_dbu=4.007886 extent_um=9.918229 wire_extension_um=9.918229 setup_ms=1.877 iterate_ms=83.315 postprocess_ms=0.000 check_ms=0.105 device_mib=1.12
+DELGPU optimization complete: backend=gpu gui=true initial_conflicts=104657 final_conflicts=80193 remaining_5nm=64 violations_lt5nm=80129 candidates=1826 repairs=12116 extent_um=2693.708982 wire_extension_um=2693.708982 coordinate_download_bytes=2661312 iteration_ms=1804.984 postprocess_ms=0.000 total_ms=1950.059
+DELGPU parameters: backend=gpu gui=true max_iterations=150 max_step=0.25W jump_offset_nm=35 max_backtracks=0 learning_rate=1.5 effective_max_step=0.375W learning_rate_end=0.5 learning_rate_mode=adaptive
+DELGPU postprocess parameters: enabled=true sweeps=24 pair_rounds=8 retract_sweeps=8 retract_mode=cooperative
+DELGPU init: design=ibex_core insts=21425 nets=21367 pins=112970 (iterms=112704, bterms=266) routed_nets=21274 special_wire_objects=2 special_wire_boxes=16319 routing_layers=10 route_layer_range=[2,7] dbu_per_micron=1000
+DELGPU die: bounds=(0.000,0.000)-(76.726,76.726) um size=76.726x76.726 um
+GPU 0: NVIDIA GeForce RTX 5060 Laptop GPU
+GPU memory: 7.96 GiB
+Compute capability: 12.0
+Streaming multiprocessors: 26
+CUDA driver/runtime: 13.1/12.9
+gpu ready
+DELGPU graph: layer=M2 trims=159445 nodes=159445 obstacles=252107 blocked=0 A=63541 B=55950 C=161930 arcs=281421
+DELGPU timing (ms): layer=M2 geometry_cpu=113.982 domains_arcs_gpu=65.184 verify=0.000
+DELGPU graph: layer=M3 trims=109940 nodes=109940 obstacles=194305 blocked=0 A=11451 B=25735 C=72845 arcs=110031
+DELGPU timing (ms): layer=M3 geometry_cpu=85.423 domains_arcs_gpu=38.456 verify=0.000
+DELGPU graph: layer=M4 trims=29577 nodes=29577 obstacles=54502 blocked=0 A=4873 B=4051 C=12380 arcs=21304
+DELGPU timing (ms): layer=M4 geometry_cpu=36.874 domains_arcs_gpu=10.339 verify=0.000
+DELGPU graph: layer=M5 trims=16360 nodes=16360 obstacles=29599 blocked=0 A=4596 B=2017 C=5587 arcs=12200
+DELGPU timing (ms): layer=M5 geometry_cpu=24.479 domains_arcs_gpu=6.269 verify=0.000
+DELGPU graph: layer=M6 trims=12435 nodes=12435 obstacles=21380 blocked=0 A=2893 B=2628 C=5609 arcs=11130
+DELGPU timing (ms): layer=M6 geometry_cpu=22.286 domains_arcs_gpu=5.725 verify=0.000
+DELGPU graph: layer=M7 trims=4907 nodes=4907 obstacles=8666 blocked=0 A=0 B=333 C=941 arcs=1274
+DELGPU timing (ms): layer=M7 geometry_cpu=17.634 domains_arcs_gpu=2.327 verify=0.000
+DELGPU complete: backend=gpu gui=true verify=false layers=6 nodes=332664 arcs=437360 build_ms=444.034 display_ms=21.807
+DELGPU iteration: layer=M2 iter=25 lambda=10 conflicts=59297 remaining_5nm=3092 max_gap_dbu=44.959191 candidates=1 repairs=62 learning_rate=1.437338
+DELGPU iteration: layer=M2 iter=50 lambda=20 conflicts=55882 remaining_5nm=286 max_gap_dbu=44.687670 candidates=1 repairs=2 learning_rate=1.256062
+DELGPU iteration: layer=M2 iter=75 lambda=40 conflicts=53967 remaining_5nm=161 max_gap_dbu=44.607659 candidates=1 repairs=1 learning_rate=1.005271
+DELGPU iteration: layer=M2 iter=100 lambda=80 conflicts=53245 remaining_5nm=107 max_gap_dbu=41.929204 candidates=1 repairs=0 learning_rate=0.753049
+DELGPU iteration: layer=M2 iter=125 lambda=80 conflicts=52528 remaining_5nm=79 max_gap_dbu=38.204428 candidates=1 repairs=1 learning_rate=0.567868
+DELGPU iteration: layer=M2 iter=150 lambda=80 conflicts=53157 remaining_5nm=46 max_gap_dbu=22.004756 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M2 stage=quantized conflicts=3733 remaining_5nm=75 violations_lt5nm=3658 max_gap_dbu=22.000 sum_gap_dbu=4789.000 extent_um=1837.327000 stage_ms=8.923
+DELGPU postprocess: layer=M2 stage=repaired conflicts=80 remaining_5nm=32 violations_lt5nm=48 max_gap_dbu=16.000 sum_gap_dbu=396.000 extent_um=1883.475000 stage_ms=19.616
+DELGPU postprocess: layer=M2 stage=retracted conflicts=80 remaining_5nm=32 violations_lt5nm=48 max_gap_dbu=16.000 sum_gap_dbu=396.000 extent_um=1775.271000 stage_ms=10.388
+DELGPU postprocess search: layer=M2 colors=8 sweeps=5 pair_rounds=1 retract_sweeps=8 single_moves=4747 pair_moves=0 retract_moves=14816 cooperative_moves=627 group_moves=3944 propagation_rounds=48 prepare_ms=28.131 total_ms=68.129
+DELGPU optimization: layer=M2 iterations=150 initial_conflicts=70415 final_conflicts=80 remaining_5nm=32 violations_lt5nm=48 max_gap_dbu=16.000000 extent_um=1775.271000 wire_extension_um=1775.271000 setup_ms=62.666 iterate_ms=847.873 postprocess_ms=68.129 check_ms=10.899 device_mib=91.42
+DELGPU iteration: layer=M3 iter=25 lambda=10 conflicts=17897 remaining_5nm=293 max_gap_dbu=44.000000 candidates=1 repairs=27 learning_rate=1.437338
+DELGPU iteration: layer=M3 iter=50 lambda=20 conflicts=17807 remaining_5nm=48 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=1.026157
+DELGPU iteration: layer=M3 iter=75 lambda=40 conflicts=17695 remaining_5nm=11 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.525392
+DELGPU iteration: layer=M3 iter=100 lambda=80 conflicts=17598 remaining_5nm=10 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M3 iter=125 lambda=80 conflicts=17664 remaining_5nm=15 max_gap_dbu=44.000000 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M3 iter=150 lambda=80 conflicts=17574 remaining_5nm=11 max_gap_dbu=44.000000 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M3 stage=quantized conflicts=445 remaining_5nm=17 violations_lt5nm=428 max_gap_dbu=44.000 sum_gap_dbu=1008.000 extent_um=506.127000 stage_ms=4.071
+DELGPU postprocess: layer=M3 stage=repaired conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=515.688000 stage_ms=6.225
+DELGPU postprocess: layer=M3 stage=retracted conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=497.373000 stage_ms=5.726
+DELGPU postprocess search: layer=M3 colors=7 sweeps=5 pair_rounds=2 retract_sweeps=8 single_moves=517 pair_moves=1 retract_moves=3035 cooperative_moves=82 group_moves=1012 propagation_rounds=64 prepare_ms=11.469 total_ms=28.567
+DELGPU optimization: layer=M3 iterations=150 initial_conflicts=20140 final_conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000000 extent_um=497.373000 wire_extension_um=497.373000 setup_ms=20.701 iterate_ms=415.921 postprocess_ms=28.567 check_ms=5.468 device_mib=44.38
+DELGPU iteration: layer=M4 iter=25 lambda=10 conflicts=3338 remaining_5nm=20 max_gap_dbu=51.976335 candidates=1 repairs=0 learning_rate=1.171537
+DELGPU iteration: layer=M4 iter=50 lambda=20 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=75 lambda=40 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=100 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=125 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M4 iter=150 lambda=80 conflicts=3449 remaining_5nm=1 max_gap_dbu=7.850719 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M4 stage=quantized conflicts=566 remaining_5nm=1 violations_lt5nm=565 max_gap_dbu=8.000 sum_gap_dbu=773.000 extent_um=115.500000 stage_ms=1.520
+DELGPU postprocess: layer=M4 stage=repaired conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=123.610000 stage_ms=3.682
+DELGPU postprocess: layer=M4 stage=retracted conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=117.388000 stage_ms=2.053
+DELGPU postprocess search: layer=M4 colors=6 sweeps=3 pair_rounds=1 retract_sweeps=6 single_moves=681 pair_moves=0 retract_moves=1945 cooperative_moves=114 group_moves=80 propagation_rounds=32 prepare_ms=2.805 total_ms=10.531
+DELGPU optimization: layer=M4 iterations=150 initial_conflicts=5771 final_conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000000 extent_um=117.388000 wire_extension_um=117.388000 setup_ms=5.573 iterate_ms=178.659 postprocess_ms=10.531 check_ms=1.327 device_mib=9.92
+DELGPU iteration: layer=M5 iter=25 lambda=10 conflicts=2849 remaining_5nm=15 max_gap_dbu=51.754741 candidates=1 repairs=0 learning_rate=1.168330
+DELGPU iteration: layer=M5 iter=50 lambda=20 conflicts=2869 remaining_5nm=1 max_gap_dbu=5.234107 candidates=3 repairs=0 learning_rate=0.598185
+DELGPU iteration: layer=M5 iter=75 lambda=40 conflicts=2864 remaining_5nm=0 max_gap_dbu=1.856430 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=100 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=125 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M5 iter=150 lambda=80 conflicts=2861 remaining_5nm=0 max_gap_dbu=1.709493 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M5 stage=quantized conflicts=73 remaining_5nm=0 violations_lt5nm=73 max_gap_dbu=2.000 sum_gap_dbu=80.000 extent_um=71.206000 stage_ms=0.943
+DELGPU postprocess: layer=M5 stage=repaired conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=71.488000 stage_ms=2.760
+DELGPU postprocess: layer=M5 stage=retracted conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=65.872000 stage_ms=1.831
+DELGPU postprocess search: layer=M5 colors=6 sweeps=3 pair_rounds=1 retract_sweeps=5 single_moves=88 pair_moves=0 retract_moves=1609 cooperative_moves=41 group_moves=31 propagation_rounds=32 prepare_ms=1.328 total_ms=7.642
+DELGPU optimization: layer=M5 iterations=150 initial_conflicts=4552 final_conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000000 extent_um=65.872000 wire_extension_um=65.872000 setup_ms=3.936 iterate_ms=121.848 postprocess_ms=7.642 check_ms=0.556 device_mib=5.52
+DELGPU iteration: layer=M6 iter=25 lambda=10 conflicts=3095 remaining_5nm=147 max_gap_dbu=79.864529 candidates=1 repairs=6 learning_rate=1.437338
+DELGPU iteration: layer=M6 iter=50 lambda=20 conflicts=3013 remaining_5nm=50 max_gap_dbu=75.488416 candidates=1 repairs=1 learning_rate=1.012047
+DELGPU iteration: layer=M6 iter=75 lambda=40 conflicts=2998 remaining_5nm=13 max_gap_dbu=47.345749 candidates=1 repairs=0 learning_rate=0.647710
+DELGPU iteration: layer=M6 iter=100 lambda=80 conflicts=2984 remaining_5nm=7 max_gap_dbu=44.077972 candidates=1 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M6 iter=125 lambda=80 conflicts=2973 remaining_5nm=6 max_gap_dbu=45.000000 candidates=3 repairs=1 learning_rate=0.500000
+DELGPU iteration: layer=M6 iter=150 lambda=80 conflicts=2973 remaining_5nm=6 max_gap_dbu=45.000000 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M6 stage=quantized conflicts=318 remaining_5nm=6 violations_lt5nm=312 max_gap_dbu=45.000 sum_gap_dbu=423.000 extent_um=150.758000 stage_ms=0.863
+DELGPU postprocess: layer=M6 stage=repaired conflicts=4 remaining_5nm=4 violations_lt5nm=0 max_gap_dbu=9.000 sum_gap_dbu=36.000 extent_um=149.615000 stage_ms=3.146
+DELGPU postprocess: layer=M6 stage=retracted conflicts=4 remaining_5nm=4 violations_lt5nm=0 max_gap_dbu=9.000 sum_gap_dbu=36.000 extent_um=141.472000 stage_ms=3.029
+DELGPU postprocess search: layer=M6 colors=6 sweeps=3 pair_rounds=1 retract_sweeps=8 single_moves=344 pair_moves=0 retract_moves=674 cooperative_moves=29 group_moves=247 propagation_rounds=64 prepare_ms=1.096 total_ms=8.433
+DELGPU optimization: layer=M6 iterations=150 initial_conflicts=3590 final_conflicts=4 remaining_5nm=4 violations_lt5nm=0 max_gap_dbu=9.000000 extent_um=141.472000 wire_extension_um=141.472000 setup_ms=3.384 iterate_ms=99.791 postprocess_ms=8.433 check_ms=0.434 device_mib=4.66
+DELGPU iteration: layer=M7 iter=25 lambda=10 conflicts=183 remaining_5nm=2 max_gap_dbu=8.968549 candidates=1 repairs=0 learning_rate=0.612173
+DELGPU iteration: layer=M7 iter=50 lambda=20 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=75 lambda=40 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=100 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=125 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU iteration: layer=M7 iter=150 lambda=80 conflicts=179 remaining_5nm=0 max_gap_dbu=4.007886 candidates=3 repairs=0 learning_rate=0.500000
+DELGPU postprocess: layer=M7 stage=quantized conflicts=34 remaining_5nm=0 violations_lt5nm=34 max_gap_dbu=4.000 sum_gap_dbu=43.000 extent_um=9.898000 stage_ms=0.394
+DELGPU postprocess: layer=M7 stage=repaired conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=10.302000 stage_ms=0.772
+DELGPU postprocess: layer=M7 stage=retracted conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000 sum_gap_dbu=0.000 extent_um=10.196000 stage_ms=1.322
+DELGPU postprocess search: layer=M7 colors=4 sweeps=3 pair_rounds=1 retract_sweeps=3 single_moves=32 pair_moves=0 retract_moves=30 cooperative_moves=0 group_moves=15 propagation_rounds=16 prepare_ms=0.257 total_ms=2.928
+DELGPU optimization: layer=M7 iterations=150 initial_conflicts=189 final_conflicts=0 remaining_5nm=0 violations_lt5nm=0 max_gap_dbu=0.000000 extent_um=10.196000 wire_extension_um=10.196000 setup_ms=1.674 iterate_ms=86.605 postprocess_ms=2.928 check_ms=0.128 device_mib=1.16
+DELGPU optimization complete: backend=gpu gui=true initial_conflicts=104657 final_conflicts=84 remaining_5nm=36 violations_lt5nm=48 candidates=1826 repairs=12116 extent_um=2607.572000 wire_extension_um=2607.572000 coordinate_download_bytes=2661312 iteration_ms=1750.697 postprocess_ms=126.230 total_ms=2021.430
+DELGPU parameters: backend=gpu gui=false max_iterations=0 max_step=0.25W jump_offset_nm=35 max_backtracks=0 learning_rate=1.5 effective_max_step=0.375W learning_rate_end=0.5 learning_rate_mode=adaptive
+DELGPU postprocess parameters: enabled=true sweeps=24 pair_rounds=8 retract_sweeps=8 retract_mode=cooperative
+DELGPU init: design=ibex_core insts=21425 nets=21367 pins=112970 (iterms=112704, bterms=266) routed_nets=21274 special_wire_objects=2 special_wire_boxes=16319 routing_layers=10 route_layer_range=[2,7] dbu_per_micron=1000
+DELGPU die: bounds=(0.000,0.000)-(76.726,76.726) um size=76.726x76.726 um
+GPU 0: NVIDIA GeForce RTX 5060 Laptop GPU
+GPU memory: 7.96 GiB
+Compute capability: 12.0
+Streaming multiprocessors: 26
+CUDA driver/runtime: 13.1/12.9
+gpu ready
+DELGPU graph: layer=M2 trims=159445 nodes=159445 obstacles=252107 blocked=0 A=63541 B=55950 C=161930 arcs=281421
+DELGPU timing (ms): layer=M2 geometry_cpu=111.141 domains_arcs_gpu=62.634 verify=0.000
+DELGPU graph: layer=M3 trims=109940 nodes=109940 obstacles=194305 blocked=0 A=11451 B=25735 C=72845 arcs=110031
+DELGPU timing (ms): layer=M3 geometry_cpu=86.605 domains_arcs_gpu=41.165 verify=0.000
+DELGPU graph: layer=M4 trims=29577 nodes=29577 obstacles=54502 blocked=0 A=4873 B=4051 C=12380 arcs=21304
+DELGPU timing (ms): layer=M4 geometry_cpu=36.087 domains_arcs_gpu=11.220 verify=0.000
+DELGPU graph: layer=M5 trims=16360 nodes=16360 obstacles=29599 blocked=0 A=4596 B=2017 C=5587 arcs=12200
+DELGPU timing (ms): layer=M5 geometry_cpu=24.653 domains_arcs_gpu=6.393 verify=0.000
+DELGPU graph: layer=M6 trims=12435 nodes=12435 obstacles=21380 blocked=0 A=2893 B=2628 C=5609 arcs=11130
+DELGPU timing (ms): layer=M6 geometry_cpu=24.170 domains_arcs_gpu=4.898 verify=0.000
+DELGPU graph: layer=M7 trims=4907 nodes=4907 obstacles=8666 blocked=0 A=0 B=333 C=941 arcs=1274
+DELGPU timing (ms): layer=M7 geometry_cpu=17.881 domains_arcs_gpu=2.396 verify=0.000
+DELGPU complete: backend=gpu gui=false verify=false layers=6 nodes=332664 arcs=437360 build_ms=449.499 display_ms=0.000
+pass: report captures graph, domains, continuous150, full150 and disabled GUI

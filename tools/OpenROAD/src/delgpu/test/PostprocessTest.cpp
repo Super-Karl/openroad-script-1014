@@ -315,5 +315,371 @@ TEST(DelgpuPostprocess, BlockedUnsatisfiableHalfDbuMergeAndEmptyEdges)
   l.nodes[0].low2 = INT64_MIN;
   EXPECT_THROW(makePostprocessGraph(l, 1000), std::invalid_argument);
 }
+TEST(DelgpuPostprocess, JointNetworkOptimizesMixedTightChain)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 0});
+  l.nodes[0].low2 = l.nodes[1].low2 = 0;
+  l.nodes[2].up2 = 0;
+  edge(l, 0, 1, {{.low2 = -4, .has_high = false}});
+  edge(l, 1, 2, {{.low2 = -20, .has_high = false}});
+  const std::vector<double> before{8, 6, -4};
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(before);
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 1;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 18);
+  EXPECT_EQ(r.joint.extent, 0);
+  equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, JointBranchesEscapeDisconnectedLegalIntervals)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 0});
+  l.nodes[0].blocked = true;
+  for (int i : {1, 2}) {
+    l.nodes[i].low2 = 0;
+  }
+  edge(l, 0, 1, {{.low2 = 0, .high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 1, 2, {{.high2 = 0}}, ArcType::kB);
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu({0, 10, 10});
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 1;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.quantized.extent, 20);
+  EXPECT_EQ(r.joint.extent, 0);
+  EXPECT_EQ(r.joint.gap2, 0);
+  EXPECT_GT(r.joint_moves, 0);
+  equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, JointNetworkMatchesExhaustiveIntegerOracle)
+{
+  initializeGpu();
+  std::mt19937 random(20261016);
+  for (int sample = 0; sample < 40; ++sample) {
+    auto l = graph({0, 1, 0, 1});
+    std::vector<double> before;
+    for (int i = 0; i < 4; ++i) {
+      const int sign = i % 2 ? -1 : 1;
+      l.nodes[i].low2 = l.nodes[i].center_x2 + (sign > 0 ? 0 : -8);
+      l.nodes[i].up2 = l.nodes[i].center_x2 + (sign > 0 ? 8 : 0);
+      before.push_back(sign * int(random() % 5));
+    }
+    for (int i = 0; i < 4; ++i) {
+      const int j = (i + 1) % 4;
+      const int64_t d = l.nodes[j].center_x2 - l.nodes[i].center_x2
+                        + 2 * (before[j] - before[i]);
+      // Every branch includes a known feasible integer incumbent, including
+      // half-DBU interval boundaries and nonzero lower/upper bounds.
+      const int64_t low = d - random() % 5, up = d + random() % 5;
+      edge(l, i, j, {{.low2 = low, .high2 = up}});
+    }
+    auto gpu = makeGpuOptimizer(l, 5, 0.25);
+    gpu->setDisplacementDbu(before);
+    PostprocessOptions options{0, 0, 0};
+    options.joint_rounds = 1;
+    const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+    int64_t minimum = INT64_MAX;
+    for (int a = 0; a <= 4; ++a) {
+      for (int b = -4; b <= 0; ++b) {
+        for (int c = 0; c <= 4; ++c) {
+          for (int d = -4; d <= 0; ++d) {
+            const auto s = assessIntegerDisplacement(
+                l, {double(a), double(b), double(c), double(d)}, 1000);
+            if (!s.gap2) {
+              minimum = std::min(minimum, s.extent);
+            }
+          }
+        }
+      }
+    }
+    EXPECT_EQ(r.joint.gap2, 0) << sample;
+    EXPECT_EQ(r.joint.extent, minimum) << sample;
+    equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+  }
+}
+TEST(DelgpuPostprocess, JointSeedsReselectSeveralIntervalsTogether)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 0});
+  l.nodes[0].blocked = true;
+  l.nodes[1].low2 = l.nodes[2].low2 = 0;
+  edge(l, 0, 1, {{.high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 1, 2, {{.high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 0, 2, {{.high2 = 0}, {.low2 = 40, .high2 = 40}});
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu({0, 10, 20});
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 1;
+  options.joint_trials = 4;  // only incumbent, strict and two whole-set seeds
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.joint.extent, 0);
+  EXPECT_EQ(r.joint.gap2, 0);
+  equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, JointIntervalEnumerationMatchesExhaustiveOracle)
+{
+  initializeGpu();
+  std::mt19937 random(49681);
+  for (int sample = 0; sample < 20; ++sample) {
+    auto l = graph({0, 1, 0});
+    std::vector<double> before;
+    for (int i = 0; i < 3; ++i) {
+      l.nodes[i].low2 = l.nodes[i].center_x2;
+      l.nodes[i].up2 = l.nodes[i].center_x2 + 8;
+      before.push_back(random() % 5);
+    }
+    for (int i = 0; i < 3; ++i) {
+      const int j = (i + 1) % 3;
+      const int64_t d = l.nodes[j].center_x2 - l.nodes[i].center_x2
+                        + 2 * (before[j] - before[i]);
+      const int64_t alt = int(random() % 17) - 8;
+      edge(l,
+           i,
+           j,
+           {{.low2 = d - 1, .high2 = d + 1}, {.low2 = alt, .high2 = alt + 1}});
+    }
+    auto gpu = makeGpuOptimizer(l, 5, 0.25);
+    gpu->setDisplacementDbu(before);
+    PostprocessOptions options{0, 0, 0};
+    options.joint_rounds = 1;  // all 2^3 interval combinations fit in 16 trials
+    const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+    int64_t minimum = INT64_MAX;
+    for (int a = 0; a <= 4; ++a) {
+      for (int b = 0; b <= 4; ++b) {
+        for (int c = 0; c <= 4; ++c) {
+          const auto s = assessIntegerDisplacement(
+              l, {double(a), double(b), double(c)}, 1000);
+          if (!s.gap2) {
+            minimum = std::min(minimum, s.extent);
+          }
+        }
+      }
+    }
+    EXPECT_EQ(r.joint.extent, minimum) << sample;
+    EXPECT_EQ(r.joint.gap2, 0) << sample;
+    equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+  }
+}
+TEST(DelgpuPostprocess, JointSizeBucketsAndOversizeFallback)
+{
+  initializeGpu();
+  // Several components in one launch exercise all four resource buckets.
+  auto l = graph(std::vector<int64_t>(12 + 24 + 48 + 96 + 140, 0));
+  std::vector<double> before(l.nodes.size(), 10);
+  int begin = 0;
+  int64_t optimum = 0;
+  for (int size : {12, 24, 48, 96, 140}) {
+    l.nodes[begin].blocked = true;
+    before[begin] = 0;
+    for (int i = begin + 1; i < begin + size; ++i) {
+      l.nodes[i].low2 = 0;
+      if (i == begin + 1) {
+        edge(l, begin, i, {{.low2 = 4, .has_high = false}});
+      } else {
+        edge(l, i - 1, i, {{.high2 = 0}}, ArcType::kB);
+      }
+    }
+    optimum += (size - 1) * (size > 128 ? 10 : 2);
+    begin += size;
+  }
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(before);
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 1;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.joint.extent, optimum);
+  EXPECT_EQ(r.joint_eligible, 4);
+  EXPECT_EQ(r.joint_skipped, 1);
+  equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, JointWarpDistancesPreserveLargeIntegerGeometry)
+{
+  initializeGpu();
+  constexpr int64_t scale = int64_t{1} << 37;
+  auto l = graph({0, 0, 0});
+  l.nodes[0].blocked = true;
+  for (int i : {1, 2}) {
+    l.nodes[i].low2 = 0;
+    l.nodes[i].up2 = int64_t{1} << 40;
+  }
+  edge(l,
+       0,
+       1,
+       {{.low2 = 2 * scale, .high2 = 2 * scale},
+        {.low2 = 4 * scale, .high2 = 4 * scale}});
+  edge(l, 1, 2, {{.low2 = 2 * scale, .has_high = false}});
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu({0, double(2 * scale), double(3 * scale)});
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 1;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.joint.extent, 3 * scale);
+  EXPECT_EQ(r.joint.gap2, 0);
+  EXPECT_GT(r.joint_bound_solves, 0);
+  equal(r.joint, assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, JointBranchesRejectInfeasibleCyclesAndPreserveResiduals)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 1, 0});
+  for (int i : {0, 3}) {
+    l.nodes[i].blocked = true;
+  }
+  l.nodes[1].low2 = 0;
+  l.nodes[2].low2 = 1;
+  edge(l, 0, 1, {{.low2 = 0, .high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 1, 3, {{.low2 = -20, .high2 = -20}});
+  // The half-DBU center prevents exact integer merging on this parallel arc.
+  edge(l, 1, 2, {{.low2 = 0, .high2 = 0}}, ArcType::kB);
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  const std::vector<double> before{0, 10, 10, 0};
+  gpu->setDisplacementDbu(before);
+  PostprocessOptions options{0, 0, 0};
+  options.joint_rounds = 3;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  const auto after = gpu->displacementDbu();
+  equal(r.joint, assessIntegerDisplacement(l, after, 1000));
+  EXPECT_LE(r.joint.extent, r.quantized.extent);
+  EXPECT_LE(objective(r.joint), objective(r.quantized));
+  for (const auto& e : l.arcs) {
+    auto one = l;
+    one.arcs = {e};
+    EXPECT_LE(assessIntegerDisplacement(one, after, 1000).gap2,
+              assessIntegerDisplacement(one, before, 1000).gap2);
+  }
+  options.joint_trials = 1;
+  EXPECT_THROW(gpu->postprocess(makePostprocessGraph(l, 1000), options),
+               std::invalid_argument);
+}
+TEST(DelgpuPostprocess, EmaMovesDirectionalTightChainWithoutSizeCutoff)
+{
+  initializeGpu();
+  auto l = graph(std::vector<int64_t>(250, 0));
+  for (auto& n : l.nodes) {
+    n.low2 = 0;
+  }
+  for (int i = 1; i < 250; ++i) {
+    edge(l, i - 1, i, {{.high2 = 0}}, ArcType::kB);
+  }
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu(std::vector<double>(250, 20));
+  PostprocessOptions options{0, 0, 8};
+  options.ema_retract = true;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 0);
+  EXPECT_EQ(r.retracted.gap2, 0);
+  EXPECT_EQ(r.ema_moves, 1);
+  EXPECT_EQ(r.ema_budget_reached, 0);
+  equal(r.retracted,
+        assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, EmaJointMoveCanExtendMinorityToReduceTotal)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 100});
+  l.nodes[0].low2 = l.nodes[1].low2 = 0;
+  l.nodes[2].low2 = -20;
+  l.nodes[2].up2 = 100;
+  edge(l, 0, 1, {{.high2 = 0}}, ArcType::kB);
+  edge(l, 1, 2, {{.high2 = 0}}, ArcType::kB);
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  const std::vector<double> before{20, 20, -30};
+  gpu->setDisplacementDbu(before);
+  PostprocessOptions options{0, 0, 8};
+  options.ema_retract = true;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 50);
+  EXPECT_GT(std::abs(gpu->displacementDbu()[2]), 30);
+  equal(r.retracted,
+        assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, EmaLegalIntervalJumpUnlocksPinnedTree)
+{
+  initializeGpu();
+  auto l = graph({0, 0});
+  l.nodes[0].blocked = true;
+  l.nodes[1].low2 = 0;
+  edge(l, 0, 1, {{.high2 = 0}, {.low2 = 20, .high2 = 20}}, ArcType::kB);
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  PostprocessOptions options{0, 0, 8};
+  options.ema_retract = true;
+  gpu->setDisplacementDbu({0, 10});
+  auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 10);
+  options.ema_jumps = true;
+  gpu->setDisplacementDbu({0, 10});
+  r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 0);
+  EXPECT_GT(r.ema_jumps, 0);
+  equal(r.retracted,
+        assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
+TEST(DelgpuPostprocess, EmaMixedDomainsAndAllOriginalResidualsRemainSafe)
+{
+  initializeGpu();
+  std::mt19937 random(92354);
+  for (int sample = 0; sample < 10; ++sample) {
+    auto l = graph(std::vector<int64_t>(25, 0));
+    std::vector<double> before;
+    for (int i = 0; i < 25; ++i) {
+      before.push_back(int(random() % 41) - 20);
+    }
+    for (int i = 0; i < 50; ++i) {
+      int a = random() % 25, b = random() % 25;
+      if (a == b) {
+        continue;
+      }
+      edge(l,
+           a,
+           b,
+           {{.has_low = false, .high2 = -24},
+            {.high2 = 0},
+            {.low2 = 24, .has_high = false}},
+           ArcType::kC);
+    }
+    auto gpu = makeGpuOptimizer(l, 5, 0.25);
+    for (int mode : {0, 1, 2}) {
+      gpu->setDisplacementDbu(before);
+      PostprocessOptions options{0, 0, 8};
+      options.ema_retract = true;
+      options.ema_jumps = mode > 0;
+      options.ema_seed = mode == 2;
+      const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+      const auto after = gpu->displacementDbu();
+      equal(r.retracted, assessIntegerDisplacement(l, after, 1000));
+      EXPECT_LE(r.retracted.extent, r.quantized.extent);
+      for (const auto& e : l.arcs) {
+        auto one = l;
+        one.arcs = {e};
+        EXPECT_LE(assessIntegerDisplacement(one, after, 1000).gap2,
+                  assessIntegerDisplacement(one, before, 1000).gap2);
+      }
+    }
+  }
+}
+TEST(DelgpuPostprocess, EmaLpaSeedsChangeSeveralIntervalsTogether)
+{
+  initializeGpu();
+  auto l = graph({0, 0, 0});
+  l.nodes[0].blocked = true;
+  l.nodes[1].low2 = l.nodes[2].low2 = 0;
+  edge(l, 0, 1, {{.high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 1, 2, {{.high2 = 0}, {.low2 = 20, .high2 = 20}});
+  edge(l, 0, 2, {{.high2 = 0}, {.low2 = 40, .high2 = 40}});
+  auto gpu = makeGpuOptimizer(l, 5, 0.25);
+  gpu->setDisplacementDbu({0, 10, 20});
+  PostprocessOptions options{0, 0, 8};
+  options.ema_retract = options.ema_jumps = options.ema_seed = true;
+  const auto r = gpu->postprocess(makePostprocessGraph(l, 1000), options);
+  EXPECT_EQ(r.retracted.extent, 0);
+  EXPECT_EQ(r.retracted.gap2, 0);
+  EXPECT_EQ(r.ema_seed_feasible, 1);
+  EXPECT_EQ(r.ema_seed_accepted, 1);
+  equal(r.retracted,
+        assessIntegerDisplacement(l, gpu->displacementDbu(), 1000));
+}
 }  // namespace
 }  // namespace delgpu

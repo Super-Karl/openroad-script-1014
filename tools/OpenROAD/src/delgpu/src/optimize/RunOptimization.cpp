@@ -220,7 +220,10 @@ void runOptimization(odb::dbBlock* block,
     double layer_postprocess_ms = 0;
     if (gpu && postprocess) {
       const auto post_begin = Clock::now();
-      auto exact = makePostprocessGraph(layer, block->getDbUnitsPerMicron());
+      auto exact = makePostprocessGraph(
+          layer,
+          block->getDbUnitsPerMicron(),
+          post_options.joint_rounds > 0 || post_options.ema_retract);
       const auto prepared = Clock::now();
       post = device->postprocess(exact, post_options);
       layer_postprocess_ms
@@ -255,6 +258,38 @@ void runOptimization(odb::dbBlock* block,
       stage("quantized", post->quantized, post->quantize_ms);
       stage("repaired", post->repaired, post->repair_ms);
       stats = stage("retracted", post->retracted, post->retract_ms);
+      if (post_options.ema_retract) {
+        logger->report(
+            "DELGPU EMA: layer={} moves={} pivots={} jumps={} "
+            "budget_reached={} seed_feasible={} seed_accepted={} "
+            "stage_ms={:.3f}",
+            layer.layer,
+            post->ema_moves,
+            post->ema_pivots,
+            post->ema_jumps,
+            post->ema_budget_reached,
+            post->ema_seed_feasible,
+            post->ema_seed_accepted,
+            post->retract_ms);
+      }
+      if (post_options.joint_rounds) {
+        stats = stage("joint", post->joint, post->joint_ms);
+        logger->report(
+            "DELGPU joint search: layer={} rounds={} trials={} "
+            "accepted_components={} "
+            "eligible_components={} skipped_components={} bound_solves={} "
+            "bound_complete={} bound_limited={} stage_ms={:.3f}",
+            layer.layer,
+            post->joint_rounds,
+            post_options.joint_trials,
+            post->joint_moves,
+            post->joint_eligible,
+            post->joint_skipped,
+            post->joint_bound_solves,
+            post->joint_bound_complete,
+            post->joint_bound_limited,
+            post->joint_ms);
+      }
       const double prepare_ms
           = std::chrono::duration<double, std::milli>(prepared - post_begin)
                 .count();
@@ -292,7 +327,7 @@ void runOptimization(odb::dbBlock* block,
     if (post) {
       const auto checked = assessIntegerDisplacement(
           layer, final_positions, block->getDbUnitsPerMicron());
-      const auto& expected = post->retracted;
+      const auto& expected = post->joint;
       if (checked.extent != expected.extent || checked.gap2 != expected.gap2
           || checked.max_gap2 != expected.max_gap2) {
         throw std::runtime_error(

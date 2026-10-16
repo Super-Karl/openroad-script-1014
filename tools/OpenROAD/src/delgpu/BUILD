@@ -87,7 +87,7 @@ genrule(
 
 cc_library(
     name = "graph_cuda",
-    hdrs = ["src/optimize/Postprocess.cuh"],
+    hdrs = ["src/optimize/Postprocess.cuh", "src/optimize/JointPostprocess.cuh", "src/optimize/EmaPostprocess.cuh"],
     srcs = [":graph_cuda_translation_unit", ":optimizer_cuda_translation_unit"],
     additional_compiler_inputs = [
         "@cuda_local//:compiler_inputs",

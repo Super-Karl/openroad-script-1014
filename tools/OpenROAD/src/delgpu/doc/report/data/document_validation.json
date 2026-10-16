@@ -1,0 +1,16 @@
+{
+  "pdf_pages": 21,
+  "pdf_outline_entries": 46,
+  "body_figures": 11,
+  "pseudocode_blocks": 6,
+  "replacement_characters": 0,
+  "out_of_page_objects": 0,
+  "source_hashes_verified": 33,
+  "offline_html": true,
+  "word_files": 0,
+  "gui_default150_final": {
+    "ge5nm": 36,
+    "lt5nm": 48,
+    "extent_um": 2607.572
+  }
+}

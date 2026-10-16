@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 
 #include "delgpu/GpuOptimizer.h"
@@ -61,7 +62,9 @@ void validateMagnitude(const LayerNodes& layer)
 }
 }  // namespace
 
-PostprocessGraph makePostprocessGraph(const LayerNodes& layer, int dbu)
+PostprocessGraph makePostprocessGraph(const LayerNodes& layer,
+                                      int dbu,
+                                      bool joint_components)
 {
   if (dbu <= 0
       || layer.nodes.size() + layer.arcs.size()
@@ -118,6 +121,53 @@ PostprocessGraph makePostprocessGraph(const LayerNodes& layer, int dbu)
   g.color_nodes.resize(g.nodes.size());
   for (size_t i = 0; i < colors.size(); ++i) {
     g.color_nodes[cursor[colors[i]]++] = static_cast<int>(i);
+  }
+  if (!joint_components) {
+    return g;
+  }
+  std::vector<int> parent(g.nodes.size());
+  std::iota(parent.begin(), parent.end(), 0);
+  const auto root = [&](int i) {
+    while (parent[i] != i) {
+      i = parent[i] = parent[parent[i]];
+    }
+    return i;
+  };
+  for (const auto& e : layer.arcs) {
+    const int a = root(e.src), b = root(e.dst);
+    parent[b] = a;
+  }
+  std::vector<int> labels(g.nodes.size(), -1);
+  int count_components = 0;
+  for (const auto& e : layer.arcs) {
+    const int r = root(e.src);
+    if (labels[r] < 0) {
+      labels[r] = count_components++;
+    }
+  }
+  g.component_offsets.assign(count_components + 1, 0);
+  g.component_edge_counts.assign(count_components, 0);
+  for (const auto& e : layer.arcs) {
+    ++g.component_edge_counts[labels[root(e.src)]];
+  }
+  for (size_t i = 0; i < g.nodes.size(); ++i) {
+    const int c = labels[root(i)];
+    if (c >= 0) {
+      ++g.component_offsets[c + 1];
+    }
+  }
+  std::partial_sum(g.component_offsets.begin(),
+                   g.component_offsets.end(),
+                   g.component_offsets.begin());
+  auto node_cursor = g.component_offsets;
+  g.component_nodes.resize(g.component_offsets.back());
+  g.node_local.assign(g.nodes.size(), -1);
+  for (size_t i = 0; i < g.nodes.size(); ++i) {
+    const int c = labels[root(i)];
+    if (c >= 0) {
+      g.node_local[i] = node_cursor[c] - g.component_offsets[c];
+      g.component_nodes[node_cursor[c]++] = i;
+    }
   }
   return g;
 }

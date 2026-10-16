@@ -262,3 +262,77 @@ mkdir -p flow/reports/asap7/ibex/base/delgpu_retraction
 python3 tools/OpenROAD/src/delgpu/scripts/summarize_retraction.py \
   flow/reports/asap7/ibex/base/delgpu_retraction
 ```
+
+## DEL 思路的 GPU 联合优化实验
+
+新增可选的“区间重选 + 整分量网络优化 + 有预算的分支定界”，详见
+[实现、伪代码和实测](doc/joint_network_validation.md)。所有数值求解在 GPU 上运行，
+不调用 CPU LP/MIP。当前默认 `-post_joint_rounds 0`，保留原有实验基线。
+
+```bash
+# 平衡配置：联合优化 1 轮，16 个候选/分支状态预算
+./dev-openroad.sh optimize --post-joint-rounds 1 --post-joint-trials 16
+# 质量优先：扩大到 64，可直接在 GUI 控制台使用同名下划线参数
+./dev-openroad.sh optimize --post-joint-rounds 1 --post-joint-trials 64
+```
+
+```tcl
+delgpu -gui 0 -post_joint_rounds 1 -post_joint_trials 64
+```
+
+`-post_joint_rounds` 范围 0–64；`-post_joint_trials` 范围 2–64，默认 16。
+2 只做当前区间联合压缩与严格合法化尝试；3 追加原点区间种子；≥4 再追加半位移种子和分支定界，
+有剩余预算时枚举区间组合或单边分支切换。候选数与分支定界状态数各有此上限。
+支持最多 128 节点、512 边的分量；更大的分量保留旧后处理结果。
+只在原本完全合法的分量执行分支定界，其余分量保持每条边的残差上限。
+超过预算时保留最优可行候选，不保证整个设计达到 MIP 最优。
+
+启用后 CSV 新增 `joint` 行；`final`、GUI 和独立主机检查均采用联合优化后的坐标。
+`-gui 0` 不显示、不下载搜索中的完整坐标；每层仍只下载一次最终坐标。
+关闭实验时不准备联合优化分组、不申请搜索缓冲、不启动相关核。
+
+同一 IBEX 输入三次复测：原方法 2607.572µm，新平衡配置 2456.274µm，
+质量优先配置 **2433.808µm**；≥5nm / <5nm 仍为 **36 / 48**。
+单次 `delgpu` 命令预热后耗时中位数分别为 **2.669 / 3.773 / 5.422 秒**，
+包含建图和后处理，不包含读库。三方法比较中的 DEL 为 2423.544µm、LEO 为 2441.818µm。
+
+## 快速 EMA 后处理实验
+
+针对联合网络/MIP式搜索耗时较高的问题，新增 LEO 式紧约束树回缩及轻量贪心选区间，
+见 [EMA实现、消融与三次实测](doc/ema_validation.md)。不运行最小费用流或分支定界。
+
+```bash
+# 推荐实验：100轮连续优化 + GPU贪心区间候选 + EMA
+./dev-openroad.sh optimize --iterations 100 --post-retract-mode ema_lpa
+# 保持原150轮预算，比较纯EMA与加入区间候选的效果
+./dev-openroad.sh optimize --post-retract-mode ema
+./dev-openroad.sh optimize --post-retract-mode ema_lpa
+```
+
+```tcl
+delgpu -gui 0 -max_iterations 100 -post_retract_mode ema_lpa -post_joint_rounds 0
+```
+
+新增模式：`ema` 为固定当前区间的有向紧树回缩；`ema_jump` 允许树/单点跨合法区间；
+`ema_lpa` 再用按 type/slack/ID 排序的贪心可行区间选择生成候选，经EMA压缩并逐边验证后，
+只替换更短的分量。一个线程处理一个独立分量，复用CSR与 O(nodes) 队列，
+不按128节点截断，也不逐pivot启动核或下载坐标。
+EMA每分量接受移动次数上限为 `post_retract_sweeps × 分量节点数`，默认为8倍节点数；
+实际测试全部未触及该预算。`post_retract_sweeps=0` 完全关闭该阶段。
+
+同输入三次交替测试：原GPU150轮为2607.572µm、36/48条违例、命令2.595秒；
+新100轮配置为 **2453.705µm、36/44条违例、2.138秒**。
+时间为预热后中位数，含建图、不含读库。相对原方案增加量减少5.90%，时间减少17.60%。
+本轮LEO为2441.818µm、336/4条违例、2.936秒；新方案长度仍多0.49%，但严重违例更少。
+与150轮联合搜索相比时间更短，长度也未声称达到其2433.808µm。
+
+默认仍为150轮、`post_retract_mode=cooperative`、`post_joint_rounds=0`，
+上述模式通过显式参数启用。GUI开关和最终独立整数检查保持生效。
+
+## 全流程汇报文档
+
+已保存包含数学模型、算法伪代码、流程图、默认 150 轮 GUI 演示与实测表的完整汇报：
+[PDF](doc/report/delgpu_full_report.pdf)、
+[Markdown 源稿](doc/report/delgpu_full_report.md)、
+[离线 HTML](doc/report/delgpu_full_report.html)。
+配图、冻结的实验数据与重建方式见 [报告目录说明](doc/report/README.md)。

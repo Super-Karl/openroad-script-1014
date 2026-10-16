@@ -21,6 +21,9 @@ struct PostprocessGraph
   std::vector<int64_t> initial2;
   std::vector<PostRange> ranges;
   std::vector<int> color_nodes, color_offsets;
+  // Same edge-first connected-component numbering as TrimOptimizer.
+  std::vector<int> component_nodes, component_offsets, node_local;
+  std::vector<int> component_edge_counts;
   int64_t tolerance2 = 0;
 };
 struct PostprocessOptions
@@ -30,6 +33,12 @@ struct PostprocessOptions
   int retract_sweeps = 8;
   bool cooperative_retract = true;
   int propagation_rounds = 128;
+  // Opt-in GPU interval search and exact fixed-interval network optimization.
+  int joint_rounds = 0;
+  int joint_trials = 16;
+  bool ema_retract = false;
+  bool ema_jumps = false;
+  bool ema_seed = false;
 };
 struct PostprocessStats
 {
@@ -38,11 +47,19 @@ struct PostprocessStats
 };
 struct PostprocessResult
 {
-  PostprocessStats quantized, repaired, retracted;
+  PostprocessStats quantized, repaired, retracted, joint;
   int sweeps = 0, pair_rounds = 0, retract_sweeps = 0;
   int64_t single_moves = 0, pair_moves = 0, retract_moves = 0;
   int64_t cooperative_moves = 0, group_moves = 0;
   int propagation_rounds = 0;
+  int joint_rounds = 0;
+  int64_t joint_moves = 0;
+  int64_t joint_eligible = 0, joint_skipped = 0;
+  int64_t joint_bound_solves = 0, joint_bound_complete = 0,
+          joint_bound_limited = 0;
+  double joint_ms = 0;
+  int64_t ema_moves = 0, ema_pivots = 0, ema_jumps = 0, ema_budget_reached = 0;
+  int64_t ema_seed_feasible = 0, ema_seed_accepted = 0;
   double quantize_ms = 0, repair_ms = 0, retract_ms = 0, total_ms = 0;
 };
 }  // namespace delgpu
