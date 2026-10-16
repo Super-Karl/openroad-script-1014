@@ -51,7 +51,8 @@ TEST(DelgpuOptimizer, FirstGradientStepMatchesCpu)
   initializeGpu();
   auto layer = pair(ArcType::kA, 80);
   LayerOptimizer cpu(layer, 5, 1000, 5, 0.2);
-  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0);
+  // The CPU reference keeps alpha=0.01; the application default is now 0.1.
+  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0, 0.01);
   EXPECT_NEAR(gpu->evaluate(10).energy, cpu.evaluate(10).energy, 1e-10);
   auto gs = gpu->step(10);
   EXPECT_TRUE(gs.gradient_accepted);
@@ -207,7 +208,7 @@ TEST(DelgpuOptimizer, MidpointAndNegativeDistanceFallBelowFiveNm)
   for (auto type : {ArcType::kA, ArcType::kB, ArcType::kC}) {
     for (int sign : {-1, 1}) {
       auto layer = pair(type, sign * (type == ArcType::kC ? 30 : 50));
-      auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0);
+      auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0, 0.01);
       for (int i = 0; i < 100 && count(gpu->evaluate(80)) > 0; ++i) {
         gpu->step(80);
       }
@@ -227,7 +228,7 @@ TEST(DelgpuOptimizer, BlockedPairRemainsStationaryAndReportsConflict)
 {
   initializeGpu();
   auto layer = pair(ArcType::kA, 50, true);
-  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0, 0.01);
   for (int i = 0; i < 12; ++i) {
     gpu->step(10);
   }
@@ -264,7 +265,7 @@ TEST(DelgpuOptimizer, SharedEndpointsStayInDomainAtLastIteration)
       layer.arcs.push_back(e);
     }
   }
-  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0, 0.01);
   const auto initial = gpu->evaluate(10);
   for (int i = 0; i < 60; ++i) {
     auto stats = gpu->step(80);
@@ -282,7 +283,7 @@ TEST(DelgpuOptimizer, IsolatedNodeAndInvalidStep)
   auto layer = pair(ArcType::kA, 80);
   layer.nodes.resize(1);
   layer.arcs.clear();
-  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 0, 1.0, 0.01);
   EXPECT_EQ(count(gpu->step(10)), 0u);
   EXPECT_DOUBLE_EQ(gpu->displacementDbu()[0], 0);
   EXPECT_THROW(makeGpuOptimizer(layer, 5, 0), std::invalid_argument);
@@ -293,7 +294,7 @@ TEST(DelgpuOptimizer, CustomIntervalsRetainCpuBarrierSemantics)
   auto layer = pair(ArcType::kB, 50);
   layer.arcs[0].ranges = {{.low2 = 70, .high2 = 80}};
   LayerOptimizer cpu(layer, 5, 1000, 35, 0.2);
-  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 19, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.2, 1000, 35, 19, 1.0, 0.01);
   for (int i = 0; i < 60; ++i) {
     const auto cs = cpu.step(80);
     const auto gs = gpu->step(80);
@@ -335,7 +336,7 @@ TEST(DelgpuOptimizer,
     layer.arcs.push_back(arc);
   }
   LayerOptimizer cpu(layer, 5, 1000, 1, 0.25);
-  auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 1, 19, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 1, 19, 1.0, 0.01);
   for (int iteration = 1; iteration <= 6; ++iteration) {
     const auto cs = cpu.step(10);
     const auto gs = gpu->step(10);
@@ -378,7 +379,7 @@ TEST(DelgpuOptimizer, MixedSharedGraphMatchesCpuForTwoHundredIterations)
     }
   }
   LayerOptimizer cpu(layer, 5, 1000, 35, 0.25);
-  auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 19, 1.0);
+  auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 19, 1.0, 0.01);
   for (int i = 1; i <= 200; ++i) {
     SCOPED_TRACE(i);
     const double lambda = 10 * (1 << std::min(3, (i - 1) / 25));
@@ -401,7 +402,7 @@ TEST(DelgpuOptimizer, DisabledBacktrackingKeepsEnergyGuardAndHardDomains)
   initializeGpu();
   for (auto type : {ArcType::kA, ArcType::kB, ArcType::kC}) {
     auto layer = pair(type, 40);
-    auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 0, 1.0);
+    auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 0, 1.0, 0.01);
     for (int i = 0; i < 40; ++i) {
       const auto before = gpu->evaluate(80);
       const auto after = gpu->step(80);

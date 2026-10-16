@@ -53,7 +53,7 @@ void DelGpu::run(bool gui,
         "iterations");
   }
   const std::string retract_mode
-      = post_retract_mode ? post_retract_mode : "cooperative";
+      = post_retract_mode ? post_retract_mode : kDefaultPostRetractMode;
   if (retract_mode != "single" && retract_mode != "cooperative"
       && retract_mode != "ema" && retract_mode != "ema_jump"
       && retract_mode != "ema_lpa") {

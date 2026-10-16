@@ -18,7 +18,7 @@ usage() {
   build-delgpu   只编译 delgpu 共享库（首次使用请先 build）
   gui            启动 GUI，默认加载 asap7/ibex/base/5_2_route.odb
   graph          加载设计并建图，默认无界面；--gui 1 显示 trim 和边
-  optimize       建图并迭代优化，默认 150 轮、0.25W 步长、35nm 跳跃、动态学习率 1.5→0.5、无 GUI
+  optimize       建图并迭代优化，默认 100 轮 + EMA、线长权重 0.1、0.25W 步长、35nm 跳跃、动态学习率 1.5→0.5、无 GUI
   run            启动 Tcl 终端，或传入 OpenROAD 参数运行脚本
   help           显示帮助
 
@@ -44,7 +44,7 @@ BAZEL 指定 Bazel 程序；CUDA 优先使用 OPENROAD_CUDA_PATH、CUDA_HOME、C
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
-optimize 还支持 --wire-weight 线长权重（GPU 默认 0.01）、--iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--postprocess-only 0|1（跳过连续迭代，默认关闭）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--post-retract-mode single|cooperative|ema|ema_jump|ema_lpa（默认 cooperative）、--post-joint-rounds GPU 联合区间优化轮数（实验，默认 0 关闭，最多 64）、--post-joint-trials 每分量候选数（默认 16，2–64）、--frame-ms 刷新间隔、--report CSV。
+optimize 还支持 --wire-weight 线长权重（GPU 默认 0.1）、--iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--postprocess-only 0|1（跳过连续迭代，默认关闭）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--post-retract-mode single|cooperative|ema|ema_jump|ema_lpa（默认 ema_lpa）、--post-joint-rounds GPU 联合区间优化轮数（实验，默认 0 关闭，最多 64）、--post-joint-trials 每分量候选数（默认 16，2–64）、--frame-ms 刷新间隔、--report CSV。
 在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
 使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
@@ -88,7 +88,7 @@ case "$command_name" in
       graph_backend=gpu
       graph_iterations=0
       graph_iterations_set=0
-      if [[ "$command_name" == optimize ]]; then graph_iterations=150; fi
+      if [[ "$command_name" == optimize ]]; then graph_iterations=100; fi
       graph_max_step=0.25
       graph_jump_offset_nm=35
       graph_learning_rate_mode=

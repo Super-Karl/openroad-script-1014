@@ -2,8 +2,9 @@
 
 从当前 OpenDB 读取 M2–M7，生成 trim、节点、移动域和 A/B/C 约束边。
 trim 使用 `module/del` 的 CPU 矩形并集与暴露端面算法；GPU 计算移动域、连接边和迭代更新。
-优化结果是 trim 覆盖层的位移，不写回 OpenDB 实际布线。GPU 默认在连续迭代后执行
-整数化、单/双端点冲突修复和安全回缩，不调用 CPU LP/MIP。
+优化结果是 trim 覆盖层的位移，不写回 OpenDB 实际布线。GPU 默认采用 100 轮连续迭代、
+整数化、单/双端点冲突修复及 GPU EMA 回缩，线长权重 0.1，不调用 CPU LP/MIP。
+最终默认配置与验证见 [EMA100 最终方案](doc/final_ema100_validation.md)。
 
 ## 在 ORFS 根目录使用
 
@@ -22,8 +23,9 @@ trim 使用 `module/del` 的 CPU 矩形并集与暴露端面算法；GPU 计算�
 
 默认使用 `nproc` 检测到的全部可用线程，`-- --jobs=8` 可覆盖。
 `gui` 子命令只打开设计；`graph --gui 1` 会自动执行建图并显示。
-GPU 优化默认参数为 `-gui 0 -max_iterations 150 -max_step 0.25 -jump_offset_nm 35
--learning_rate_mode adaptive -learning_rate 1.5 -learning_rate_end 0.5`。
+GPU 优化默认参数为 `-gui 0 -max_iterations 100 -max_step 0.25 -jump_offset_nm 35
+-learning_rate_mode adaptive -learning_rate 1.5 -learning_rate_end 0.5
+-wire_weight 0.1 -postprocess 1 -post_retract_mode ema_lpa -post_joint_rounds 0`。
 可用 `--max-step`、`--jump-offset-nm` 覆盖；实际参数会在日志中打印。
 GPU 默认不进行步长减半回溯；`--max-backtracks 0|7|19` 分别为零次、七次、十九次
 减半重试（每种尝试总共 1、8、20 个候选步长）。CPU 参考始终保留 20 个候选步长。
@@ -33,7 +35,7 @@ GPU 默认不进行步长减半回溯；`--max-backtracks 0|7|19` 分别为零�
 
 ```tcl
 delgpu -gui 1 -verify 1 -max_iterations 0 ;# 只建图、校验、显示
-delgpu                                ;# 动态 150 轮 + GPU 后处理，无 GUI
+delgpu                                ;# 动态 100 轮 + GPU EMA，权重 0.1，无 GUI
 delgpu -postprocess 0                  ;# 只保留连续迭代结果
 delgpu -gui 0 -max_backtracks 19         ;# 保留 CPU 的完整回溯预算
 delgpu -gui 0 -max_iterations 150 -learning_rate 1.5 -learning_rate_end 1.0
@@ -46,18 +48,18 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 - `-verify`：默认 `0`。设置 `1` 时以同一组 trim 节点运行 CPU R-tree/建边参考实现，
   逐项比较中心、移动域、blocked、边类型/方向/ID 和合法区间；差异会报错。
   性能实验应关闭此项，否则包含额外 CPU 工作。
-- `-max_iterations`：默认 150；`0` 只建图。`graph` 启动脚本默认 0，`optimize` 默认 150。
+- `-max_iterations`：默认 100；`0` 只建图。`graph` 启动脚本默认 0，`optimize` 默认 100。
 - `-max_step`：默认 `0.25`，普通梯度更新的每轮最大步长（线宽倍数）；停滞修复不受此限制。
 - `-jump_offset_nm`：默认 `35`。CPU/GPU 均使用 `midpoint ± offset` 跨过 B/C 势垒，
   偏移按工艺 DBU 和层线宽换算。
 - `-max_backtracks`：仅 GPU，默认 `0`，不进行步长减半重试；范围 `0..19`。
   保留全层能量下降检查，初始方向失败后仍可尝试 CPU 的两种确定性扰动。
   `19` 对应 CPU 每种尝试最多 20 个候选步长；CPU 后端不接受该选项。
-- `-wire_weight`：仅 GPU，默认 `0.01`，原有平滑绝对位移代价的系数。只调整普通梯度、
+- `-wire_weight`：仅 GPU，默认 `0.1`，原有平滑绝对位移代价的系数。只调整普通梯度、
   候选能量和能量接受检查，不改变跳跃或增加优化阶段；平滑尺度仍为 `0.01W`。
-  启动选项为 `--wire-weight`，CSV 记录实际权重。保持默认可复现 main 基线。
+  启动选项为 `--wire-weight`，CSV 记录实际权重。历史 cooperative 基线需显式设置 `0.01`。
   同输入权重扫描见 [线长权重实验](doc/wire_weight_validation.md)：`0.05` 最终少
-  4.046µm（0.155%），违例保持 36/48；大权重增加修复负担，故默认未改。
+  4.046µm（0.155%），违例保持 36/48；该旧实验采用 cooperative。最终 EMA100 使用 `0.1`。
 - `-learning_rate`：仅 GPU，默认 `1.5`，独立于规则权重 lambda 的移动比例。
   普通梯度步长和上限一起缩放：有效上限为 `max_step × learning_rate × W`，
   最后仍强制裁剪到移动域；能量下降检查和 CPU 跳跃规则继续生效。
@@ -77,8 +79,8 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 - `-post_sweeps`：修复扫描上限，默认 `24`。每轮先扫描单端点，停滞后尝试一轮双端点；
   提前无改善即停止。`0` 跳过单/双端点修复，可搭配回缩预算进行消融实验。
 - `-post_pair_rounds`：双端点搜索轮数上限，默认 `8`；`0` 禁用双端点搜索。
-- `-post_retract_mode`：默认 `cooperative`，在原单点回缩停滞后追加整组协同回缩和
-  合并组平移；`single` 可复现原方法。允许个别端点延长，但总延长量必须下降，
+- `-post_retract_mode`：默认 `ema_lpa`，贪心选择可行区间并执行有向紧树 EMA 压缩，
+  对候选逐边检查后只接受更短的分量。`cooperative` 保留原协同回缩，`single` 保留单点回缩。
   每条关联边残差均不能增加。启动选项为 `--post-retract-mode`。
 - `-post_retract_sweeps`：安全回缩扫描上限，默认 `8`；`0` 禁用回缩。
   三项均接受非负整数；启动脚本对应 `--post-sweeps`、`--post-pair-rounds`、
@@ -96,7 +98,7 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
   动态诊断列 `lr_feedback_reductions` 记录反馈降速次数，`rule_energy` 为不乘 lambda
   的规则能量；`gradient_accepted` 在 GPU 后端区分梯度接受和仅成功跳跃。
 - `-backend`：默认 `gpu`，也支持 `cpu`。CPU 后端仍使用原算法、单位学习率和完整回溯，
-  迭代预算默认 150，可显式指定 200；不初始化 CUDA。`-verify 1` 只用于 GPU。
+  迭代预算默认 100，可显式指定 200；不初始化 CUDA。`-verify 1` 只用于 GPU。
 
 显示控制位于 `DELGPU/<层>`：`trims`、`vnodes`、`arcs/A`、`arcs/B`、`arcs/C`，
 以及默认关闭的 `domains`。trim/节点为黄色，A/B/C 边分别为红/绿/青。
@@ -214,7 +216,7 @@ python3 tools/OpenROAD/src/delgpu/scripts/summarize_cpu_jump.py
 线性调度实验中，150 轮 1.5→1 得到 85 条 ≥5nm 违例。
 新的 [动态学习率实验](doc/adaptive_rate_validation.md) 中，150 轮 1.5→0.5 得到
 64 条（仅连续阶段，使用 `-postprocess 0` 复现），优化耗时中位数 1.917 秒，比固定 200 轮节省约 27.8%。
-这组动态 150 轮参数现已设为代码、Tcl 和 `optimize` 启动命令的默认值。
+这组动态 150 轮参数是历史默认；现已采用 100 轮 + EMA、权重 0.1，保留 adaptive 1.5→0.5。
 不带参数的 `delgpu` 或 `./dev-openroad.sh optimize` 即可运行，显示需显式开启。
 
 
@@ -309,7 +311,7 @@ delgpu -gui 0 -post_joint_rounds 1 -post_joint_trials 64
 ```bash
 # 推荐实验：100轮连续优化 + GPU贪心区间候选 + EMA
 ./dev-openroad.sh optimize --iterations 100 --post-retract-mode ema_lpa
-# 保持原150轮预算，比较纯EMA与加入区间候选的效果
+# 历史150轮预算需显式加 --iterations 150
 ./dev-openroad.sh optimize --post-retract-mode ema
 ./dev-openroad.sh optimize --post-retract-mode ema_lpa
 ```
@@ -331,12 +333,12 @@ EMA每分量接受移动次数上限为 `post_retract_sweeps × 分量节点数`
 本轮LEO为2441.818µm、336/4条违例、2.936秒；新方案长度仍多0.49%，但严重违例更少。
 与150轮联合搜索相比时间更短，长度也未声称达到其2433.808µm。
 
-默认仍为150轮、`post_retract_mode=cooperative`、`post_joint_rounds=0`，
-上述模式通过显式参数启用。GUI开关和最终独立整数检查保持生效。
+最终默认采用100轮、`post_retract_mode=ema_lpa`、`wire_weight=0.1`、`post_joint_rounds=0`。
+GUI开关和最终独立整数检查保持生效；上述旧表为当时显式配置的结果。
 
-`tmp-gpu-ema` 分支还支持在连续迭代中设置 `-wire_weight`，与上述三种 EMA 模式组合。
+`main` 已接入归档分支的 EMA 实现，支持在连续迭代中设置 `-wire_weight`，与上述三种 EMA 模式组合。
 权重同时作用于线长梯度、候选能量和接受检查；EMA 保持原有逐边残差保护。
-默认仍为 `0.01`。组合实验及 LEO 对照见
+当前默认为 `0.1`；旧对照使用 `0.01`。组合实验及 LEO 对照见
 [EMA 叠加线长权重验证](doc/ema_wire_weight_validation.md)。
 
 ```bash
@@ -379,7 +381,7 @@ GUI开启时显示最终后处理坐标，关闭时每层仅下载一次最终�
 
 ## 全流程汇报文档
 
-已保存包含数学模型、算法伪代码、流程图、默认 150 轮 GUI 演示与实测表的完整汇报：
+已保存包含数学模型、算法伪代码、流程图、历史 150 轮 GUI 演示与实测表的完整汇报：
 [PDF](doc/report/delgpu_full_report.pdf)、
 [Markdown 源稿](doc/report/delgpu_full_report.md)、
 [离线 HTML](doc/report/delgpu_full_report.html)。

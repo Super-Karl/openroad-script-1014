@@ -6,7 +6,7 @@ sta::define_cmd_args "delgpu" {[-gui boolean] [-verify boolean] [-backend gpu|cp
 proc delgpu { args } {
   sta::parse_key_args "delgpu" args keys {-gui -verify -backend -max_iterations -max_step -jump_offset_nm -max_backtracks -learning_rate -learning_rate_end -learning_rate_mode -wire_weight -postprocess -postprocess_only -post_sweeps -post_pair_rounds -post_retract_sweeps -post_retract_mode -post_joint_rounds -post_joint_trials -frame_ms -report} flags {}
   sta::check_argc_eq0 "delgpu" $args
-  set wire_weight 0.01
+  set wire_weight 0.1
   set postprocess_only 0
   set postprocess 1
   set show 0
@@ -25,7 +25,7 @@ proc delgpu { args } {
   if {$verify && $backend eq "cpu"} {
     error "delgpu: -verify 1 requires -backend gpu"
   }
-  set iterations 150
+  set iterations 100
   set max_step 0.25
   set jump_offset_nm 35
   set max_backtracks 0
@@ -44,7 +44,7 @@ proc delgpu { args } {
   set post_sweeps 24
   set post_pair_rounds 8
   set post_retract_sweeps 8
-  set post_retract_mode cooperative
+  set post_retract_mode ema_lpa
   set post_joint_rounds 0
   set post_joint_trials 16
   set frame_ms 100
