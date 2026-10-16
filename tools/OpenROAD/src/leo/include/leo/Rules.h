@@ -17,7 +17,7 @@ namespace leo {
 constexpr int64_t kDWidthMultiplier = 5;   // D = 5 * layer width
 constexpr int64_t kDtWidthMultiplier = 5;  // Dt = 5 * layer width
 constexpr int64_t kDuWidthMultiplier = 3;  // Du = 3 * layer width
-constexpr int kDefaultPruneFactor = 3;     // P = k * Dt (paper section 4.1)
+constexpr int kDefaultPruneFactor = 4;     // P = 4 * Dt = 20W, matching delgpu
 
 struct LayerRules
 {

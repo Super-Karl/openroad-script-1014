@@ -63,6 +63,44 @@ TEST(DelgpuOptimizer, FirstGradientStepMatchesCpu)
     EXPECT_NEAR(gx[i], cx[i], 1e-10);
   }
 }
+// Verify alpha changes both the reported energy and the descent direction.
+// No arcs: the analytic update isolates wire cost from constraint forces.
+TEST(DelgpuOptimizer, WireWeightScalesEnergyAndRetraction)
+{
+  initializeGpu();
+  auto layer = pair(ArcType::kA, 80);
+  layer.arcs.clear();
+  double previous_extent = std::numeric_limits<double>::infinity();
+  for (double weight : {0.01, 0.05, 0.1}) {
+    auto gpu = makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 0, 1.0, weight);
+    gpu->setDisplacementDbu({10, -10});
+    const double smooth = std::hypot(1.0, 0.01);
+    const auto before = gpu->evaluate(10);
+    EXPECT_NEAR(before.energy, 2 * weight * (smooth - 0.01), 1e-12);
+    EXPECT_DOUBLE_EQ(before.rule_energy, 0);
+    const auto after = gpu->step(10);
+    const auto x = gpu->displacementDbu();
+    const double expected = 10 * (1 - weight / smooth);
+    EXPECT_TRUE(after.gradient_accepted);
+    EXPECT_NEAR(x[0], expected, 1e-10);
+    EXPECT_NEAR(x[1], -expected, 1e-10);
+    EXPECT_LT(after.energy, before.energy);
+    EXPECT_LT(after.extent_dbu, previous_extent);
+    previous_extent = after.extent_dbu;
+  }
+}
+TEST(DelgpuOptimizer, WireWeightMustBeFiniteAndPositive)
+{
+  initializeGpu();
+  auto layer = pair(ArcType::kA, 80);
+  for (double weight : {0.0,
+                        -0.01,
+                        std::numeric_limits<double>::infinity(),
+                        std::numeric_limits<double>::quiet_NaN()}) {
+    EXPECT_THROW(makeGpuOptimizer(layer, 5, 0.25, 1000, 35, 0, 1.0, weight),
+                 std::invalid_argument);
+  }
+}
 TEST(DelgpuAdaptiveRate, FeedbackReducesRateAfterRejectedGradientSteps)
 {
   AdaptiveLearningRate controller(2, 0.5, 100, 100, 100);

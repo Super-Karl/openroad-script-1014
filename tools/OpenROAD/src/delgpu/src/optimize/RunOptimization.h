@@ -26,5 +26,6 @@ void runOptimization(odb::dbBlock* block,
                      const std::string& learning_rate_mode,
                      bool postprocess,
                      const PostprocessOptions& post_options,
+                     double wire_weight,
                      utl::Logger* logger);
 }

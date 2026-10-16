@@ -13,7 +13,8 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
                                                 double dbu_per_micron,
                                                 double jump_offset_nm,
                                                 int max_backtracks,
-                                                double learning_rate)
+                                                double learning_rate,
+                                                double wire_weight)
 {
   const double width = layer.rules.width;
   if (!std::isfinite(dbu_per_micron) || dbu_per_micron <= 0
@@ -131,7 +132,8 @@ std::unique_ptr<TrimOptimizer> makeGpuOptimizer(const LayerNodes& layer,
       max_step,
       jump_offset_nm * dbu_per_micron / (1000.0 * width),
       max_backtracks,
-      learning_rate);
+      learning_rate,
+      wire_weight);
 }
 
 TrimStats assessDisplacement(const LayerNodes& layer,

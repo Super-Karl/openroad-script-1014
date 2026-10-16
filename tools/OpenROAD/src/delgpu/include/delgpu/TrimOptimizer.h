@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "delgpu/Parameters.h"
 #include "delgpu/Postprocess.h"
 
 namespace delgpu {
@@ -48,7 +49,8 @@ class TrimOptimizer
                 double max_step,
                 double jump_offset_w,
                 int max_backtracks,
-                double learning_rate);
+                double learning_rate,
+                double wire_weight = kDefaultWireWeight);
   ~TrimOptimizer();
   TrimOptimizer(const TrimOptimizer&) = delete;
   TrimOptimizer& operator=(const TrimOptimizer&) = delete;

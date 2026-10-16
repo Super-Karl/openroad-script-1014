@@ -60,6 +60,7 @@ void runOptimization(odb::dbBlock* block,
                      const std::string& learning_rate_mode,
                      bool postprocess,
                      const PostprocessOptions& post_options,
+                     double wire_weight,
                      utl::Logger* logger)
 {
   using Clock = std::chrono::steady_clock;
@@ -78,7 +79,7 @@ void runOptimization(odb::dbBlock* block,
     csv << "layer,stage,iteration,lambda,energy,conflicts,remaining_5nm,max_"
            "gap_dbu,extent_dbu,candidates,repairs,elapsed_ms,learning_rate,"
            "effective_max_step_w,gradient_accepted,lr_feedback_reductions,"
-           "rule_energy,sum_gap_dbu,stage_ms,violations_lt5nm\n";
+           "rule_energy,sum_gap_dbu,stage_ms,violations_lt5nm,wire_weight\n";
     csv << std::setprecision(12);
   }
   auto write = [&](const std::string& layer,
@@ -103,7 +104,8 @@ void runOptimization(odb::dbBlock* block,
     if (total_gap >= 0) {
       csv << total_gap;
     }
-    csv << ',' << stage_ms << ',' << count(s) - remaining(s) << '\n';
+    csv << ',' << stage_ms << ',' << count(s) - remaining(s) << ','
+        << (gpu ? wire_weight : 0.01) << '\n';
     if (!csv) {
       throw std::runtime_error("Failed to write iteration report");
     }
@@ -128,7 +130,8 @@ void runOptimization(odb::dbBlock* block,
                                 block->getDbUnitsPerMicron(),
                                 jump_offset_nm,
                                 max_backtracks,
-                                learning_rate);
+                                learning_rate,
+                                wire_weight);
     } else {
       cpu = std::make_unique<LayerOptimizer>(layer,
                                              tolerance,
@@ -140,7 +143,7 @@ void runOptimization(odb::dbBlock* block,
     current_learning_rate = gpu ? learning_rate : 1.0;
     auto stats = gpu ? device->evaluate(10) : convert(cpu->evaluate(10));
     std::optional<AdaptiveLearningRate> adaptive;
-    if (gpu && learning_rate_mode == "adaptive") {
+    if (gpu && iterations > 0 && learning_rate_mode == "adaptive") {
       adaptive.emplace(learning_rate,
                        learning_rate_end,
                        iterations,
@@ -213,8 +216,11 @@ void runOptimization(odb::dbBlock* block,
       }
     }
     const auto iterated = Clock::now();
-    iteration_ms
-        += std::chrono::duration<double, std::milli>(iterated - ready).count();
+    if (iterations > 0) {
+      iteration_ms
+          += std::chrono::duration<double, std::milli>(iterated - ready)
+                 .count();
+    }
     write(layer.layer, "continuous", completed, lambda, stats);
     std::optional<PostprocessResult> post;
     double layer_postprocess_ms = 0;
@@ -394,7 +400,10 @@ void runOptimization(odb::dbBlock* block,
         stats.extent_dbu / block->getDbUnitsPerMicron(),
         wire_extension_dbu / block->getDbUnitsPerMicron(),
         std::chrono::duration<double, std::milli>(ready - start).count(),
-        std::chrono::duration<double, std::milli>(iterated - ready).count(),
+        iterations > 0
+            ? std::chrono::duration<double, std::milli>(iterated - ready)
+                  .count()
+            : 0.0,
         layer_postprocess_ms,
         std::chrono::duration<double, std::milli>(end - postprocessed).count(),
         gpu ? device->deviceBytes() / (1024.0 * 1024.0) : 0.0);

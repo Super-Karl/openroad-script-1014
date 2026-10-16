@@ -53,6 +53,11 @@ delgpu -backend cpu -gui 0 -max_iterations 50 ;# CPU 参考迭代
 - `-max_backtracks`：仅 GPU，默认 `0`，不进行步长减半重试；范围 `0..19`。
   保留全层能量下降检查，初始方向失败后仍可尝试 CPU 的两种确定性扰动。
   `19` 对应 CPU 每种尝试最多 20 个候选步长；CPU 后端不接受该选项。
+- `-wire_weight`：仅 GPU，默认 `0.01`，原有平滑绝对位移代价的系数。只调整普通梯度、
+  候选能量和能量接受检查，不改变跳跃或增加优化阶段；平滑尺度仍为 `0.01W`。
+  启动选项为 `--wire-weight`，CSV 记录实际权重。保持默认可复现 main 基线。
+  同输入权重扫描见 [线长权重实验](doc/wire_weight_validation.md)：`0.05` 最终少
+  4.046µm（0.155%），违例保持 36/48；大权重增加修复负担，故默认未改。
 - `-learning_rate`：仅 GPU，默认 `1.5`，独立于规则权重 lambda 的移动比例。
   普通梯度步长和上限一起缩放：有效上限为 `max_step × learning_rate × W`，
   最后仍强制裁剪到移动域；能量下降检查和 CPU 跳跃规则继续生效。
@@ -328,6 +333,49 @@ EMA每分量接受移动次数上限为 `post_retract_sweeps × 分量节点数`
 
 默认仍为150轮、`post_retract_mode=cooperative`、`post_joint_rounds=0`，
 上述模式通过显式参数启用。GUI开关和最终独立整数检查保持生效。
+
+`tmp-gpu-ema` 分支还支持在连续迭代中设置 `-wire_weight`，与上述三种 EMA 模式组合。
+权重同时作用于线长梯度、候选能量和接受检查；EMA 保持原有逐边残差保护。
+默认仍为 `0.01`。组合实验及 LEO 对照见
+[EMA 叠加线长权重验证](doc/ema_wire_weight_validation.md)。
+
+```bash
+./dev-openroad.sh optimize --iterations 100 --post-retract-mode ema_lpa --wire-weight 0.1
+# 预热后三次交替测量；结果先写 /tmp，避免 Windows 挂载盘日志开销干扰比较
+mkdir -p /tmp/delgpu-ema-weight
+DELGPU_BENCHMARK_DIR=/tmp/delgpu-ema-weight DELGPU_WIRE_WEIGHTS='0.01 0.02 0.1 2' \
+  ./dev-openroad.sh run -no_splash -exit \
+  tools/OpenROAD/src/delgpu/scripts/benchmark_ema_weight.tcl \
+  > /tmp/delgpu-ema-weight/benchmark.log 2>&1
+python3 tools/OpenROAD/src/delgpu/scripts/summarize_ema_weight.py /tmp/delgpu-ema-weight
+```
+
+脚本可通过 `DELGPU_ITERATION_BUDGETS`、`DELGPU_RETRACT_MODES`、`DELGPU_SAMPLES`
+设置轮数列表、EMA模式列表和重复次数；同时输出 LEO 默认及20W剪枝域对照。
+小违例严格统计为 `0 < 残差 < 5nm`；≥5nm 包含恰好5nm。
+
+固定权重0.1的[轮数扫描](doc/ema_iteration_budget_validation.md)中，50轮比100轮快29.48%，
+增加线长多11.257µm，≥5nm仍36条，小违例44→48条，最大残差17→19nm。
+75轮更保守：快15.98%，增加线长仅多3.481µm，最大残差仍17nm。
+
+### 仅执行后处理
+
+`-postprocess_only 1` 从原始trim位置直接进入整数修复和EMA，跳过连续梯度/跳跃迭代。
+后处理内部的单点、双点和回缩搜索仍按原预算运行。该模式要求GPU且启用后处理，
+会使用零轮连续迭代；如显式传 `-max_iterations`，必须为0。
+
+```tcl
+delgpu -gui 0 -postprocess_only 1 -post_retract_mode ema_lpa -post_joint_rounds 0
+```
+
+```bash
+./dev-openroad.sh optimize --gui 0 --postprocess-only 1 --post-retract-mode ema_lpa --post-joint-rounds 0
+```
+
+单独的 `-max_iterations 0` 保持原来的仅建图行为。
+GUI开启时显示最终后处理坐标，关闭时每层仅下载一次最终坐标。
+线长权重控制连续迭代，故不影响仅后处理路径；本次对照仍显式记录权重0.1。
+实验及三次对照见[仅后处理验证](doc/postprocess_only_validation.md)。
 
 ## 全流程汇报文档
 

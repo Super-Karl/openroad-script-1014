@@ -44,7 +44,7 @@ BAZEL 指定 Bazel 程序；CUDA 优先使用 OPENROAD_CUDA_PATH、CUDA_HOME、C
 DELGPU_ROUTE_DB 可覆盖 GUI 默认数据库；--db 优先于该环境变量。
 gui 可在 -- 后传入额外 OpenROAD 参数。相对路径以调用时的目录为基准。
 graph 支持 --db 路径、--gui 0|1、--verify 0|1、--backend gpu|cpu。
-optimize 还支持 --iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--post-retract-mode single|cooperative|ema|ema_jump|ema_lpa（默认 cooperative）、--post-joint-rounds GPU 联合区间优化轮数（实验，默认 0 关闭，最多 64）、--post-joint-trials 每分量候选数（默认 16，2–64）、--frame-ms 刷新间隔、--report CSV。
+optimize 还支持 --wire-weight 线长权重（GPU 默认 0.01）、--iterations 轮数、--max-step 线宽倍数、--jump-offset-nm 跳跃偏移、--learning-rate-mode linear|adaptive（默认 adaptive）、--learning-rate 学习率比例（默认 1.5）、--learning-rate-end 末轮比例/动态下限（默认 0.5）、--max-backtracks 回溯重试次数（默认 0）、--postprocess 0|1（GPU 默认开启）、--postprocess-only 0|1（跳过连续迭代，默认关闭）、--post-sweeps 修复扫描上限（默认 24）、--post-pair-rounds 双点轮数上限（默认 8）、--post-retract-sweeps 回缩扫描上限（默认 8）、--post-retract-mode single|cooperative|ema|ema_jump|ema_lpa（默认 cooperative）、--post-joint-rounds GPU 联合区间优化轮数（实验，默认 0 关闭，最多 64）、--post-joint-trials 每分量候选数（默认 16，2–64）、--frame-ms 刷新间隔、--report CSV。
 在 GUI 的 Tcl Console 中输入 delgpu -gui 1 即可显示图，-gui 0 关闭显示。
 使用 -verify 1 做 CPU/GPU 一致性校验；性能实验默认不重复运行 CPU 校验。
 修改模块并编译后，请关闭旧 GUI，再启动新进程。
@@ -87,6 +87,7 @@ case "$command_name" in
       graph_verify=0
       graph_backend=gpu
       graph_iterations=0
+      graph_iterations_set=0
       if [[ "$command_name" == optimize ]]; then graph_iterations=150; fi
       graph_max_step=0.25
       graph_jump_offset_nm=35
@@ -94,7 +95,9 @@ case "$command_name" in
       graph_learning_rate_end=
       graph_learning_rate=
       graph_max_backtracks=
+      graph_wire_weight=
       graph_postprocess=
+      graph_postprocess_only=
       graph_post_sweeps=
       graph_post_pair_rounds=
       graph_post_retract_mode=
@@ -105,21 +108,23 @@ case "$command_name" in
       graph_report=
       while (($#)); do
         case "$1" in
-          --db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--learning-rate|--learning-rate-end|--learning-rate-mode|--postprocess|--post-sweeps|--post-pair-rounds|--post-retract-sweeps|--post-retract-mode|--post-joint-rounds|--post-joint-trials|--frame-ms|--report)
+          --wire-weight|--db|--gui|--verify|--backend|--iterations|--max-step|--jump-offset-nm|--max-backtracks|--learning-rate|--learning-rate-end|--learning-rate-mode|--postprocess|--postprocess-only|--post-sweeps|--post-pair-rounds|--post-retract-sweeps|--post-retract-mode|--post-joint-rounds|--post-joint-trials|--frame-ms|--report)
             (($# >= 2)) || fail "$1 后需要提供值"
             case "$1" in
               --db) graph_db=$2 ;;
               --gui) graph_gui=$2 ;;
               --verify) graph_verify=$2 ;;
               --backend) graph_backend=$2 ;;
-              --iterations) graph_iterations=$2 ;;
+              --iterations) graph_iterations=$2; graph_iterations_set=1 ;;
               --max-step) graph_max_step=$2 ;;
               --jump-offset-nm) graph_jump_offset_nm=$2 ;;
               --max-backtracks) graph_max_backtracks=$2 ;;
               --learning-rate) graph_learning_rate=$2 ;;
               --learning-rate-end) graph_learning_rate_end=$2 ;;
               --learning-rate-mode) graph_learning_rate_mode=$2 ;;
+              --wire-weight) graph_wire_weight=$2 ;;
               --postprocess) graph_postprocess=$2 ;;
+              --postprocess-only) graph_postprocess_only=$2 ;;
               --post-sweeps) graph_post_sweeps=$2 ;;
               --post-pair-rounds) graph_post_pair_rounds=$2 ;;
               --post-retract-sweeps) graph_post_retract_sweeps=$2 ;;
@@ -135,6 +140,10 @@ case "$command_name" in
           *) fail "未知 $command_name 选项：$1" ;;
         esac
       done
+      if [[ "$graph_postprocess_only" == 1 ]]; then
+        [[ "$graph_iterations_set" != 1 || "$graph_iterations" == 0 ]] || fail "--postprocess-only 1 需要 --iterations 0，或省略 --iterations"
+        graph_iterations=0
+      fi
       [[ "$graph_gui" == 0 || "$graph_gui" == 1 ]] || fail "--gui 必须为 0 或 1"
       [[ "$graph_verify" == 0 || "$graph_verify" == 1 ]] || fail "--verify 必须为 0 或 1"
       [[ "$graph_backend" == gpu || "$graph_backend" == cpu ]] || fail "--backend 必须为 gpu 或 cpu"
@@ -156,6 +165,8 @@ case "$command_name" in
       if [[ -n "$graph_learning_rate_mode" ]]; then
         export DELGPU_LEARNING_RATE_MODE="$graph_learning_rate_mode"
       fi
+      if [[ -n "$graph_wire_weight" ]]; then export DELGPU_WIRE_WEIGHT="$graph_wire_weight"; fi
+      if [[ -n "$graph_postprocess_only" ]]; then export DELGPU_POSTPROCESS_ONLY="$graph_postprocess_only"; fi
       if [[ -n "$graph_postprocess" ]]; then export DELGPU_POSTPROCESS="$graph_postprocess"; fi
       if [[ -n "$graph_post_sweeps" ]]; then export DELGPU_POST_SWEEPS="$graph_post_sweeps"; fi
       if [[ -n "$graph_post_pair_rounds" ]]; then export DELGPU_POST_PAIR_ROUNDS="$graph_post_pair_rounds"; fi

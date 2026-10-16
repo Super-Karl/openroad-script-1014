@@ -16,7 +16,7 @@ proc preview_controls {} {
 }
 preview_controls
 gui::save_image [file join $image_dir delgpu_opt_before.png] 20 20 24 24 1200
-delgpu -gui 1 -max_iterations 20 -frame_ms 100 -post_retract_mode ema_lpa -post_joint_rounds 0
+delgpu -gui 1 -max_iterations 20 -frame_ms 100 -wire_weight 0.1 -post_retract_mode ema_lpa -post_joint_rounds 0
 preview_controls
 gui::save_image [file join $image_dir delgpu_opt_after.png] 20 20 24 24 1200
 proc bytes {p} { set f [open $p rb]; set b [read $f]; close $f; return $b }

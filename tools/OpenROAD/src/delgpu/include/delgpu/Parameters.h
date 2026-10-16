@@ -6,6 +6,8 @@ inline constexpr double kDefaultMaxStepW = 0.25;
 inline constexpr double kDefaultJumpOffsetNm = 35.0;
 // Zero retries: test the initial step, without step-halving backtracking.
 inline constexpr int kDefaultMaxBacktracks = 0;
+// Coefficient of the existing width-normalized smooth absolute wire cost.
+inline constexpr double kDefaultWireWeight = 0.01;
 inline constexpr double kDefaultLearningRate = 1.5;
 inline constexpr double kDefaultLearningRateEnd = 0.5;
 inline constexpr char kDefaultLearningRateMode[] = "adaptive";

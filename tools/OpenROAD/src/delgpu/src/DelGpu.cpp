@@ -43,8 +43,15 @@ void DelGpu::run(bool gui,
                  int post_retract_sweeps,
                  const char* post_retract_mode,
                  int post_joint_rounds,
-                 int post_joint_trials)
+                 int post_joint_trials,
+                 double wire_weight,
+                 bool postprocess_only)
 {
+  if (postprocess_only && (!gpu || !postprocess || iterations != 0)) {
+    throw std::invalid_argument(
+        "DELGPU postprocess-only mode requires GPU, postprocess and zero "
+        "iterations");
+  }
   const std::string retract_mode
       = post_retract_mode ? post_retract_mode : "cooperative";
   if (retract_mode != "single" && retract_mode != "cooperative"
@@ -79,7 +86,8 @@ void DelGpu::run(bool gui,
   if (post_sweeps < 0 || post_pair_rounds < 0 || post_retract_sweeps < 0
       || post_joint_rounds < 0 || post_joint_rounds > 64
       || post_joint_trials < 2 || post_joint_trials > 64 || iterations < 0
-      || frame_ms < 0 || !std::isfinite(max_step) || max_step <= 0
+      || !std::isfinite(wire_weight) || wire_weight <= 0 || frame_ms < 0
+      || !std::isfinite(max_step) || max_step <= 0
       || !std::isfinite(jump_offset_nm) || jump_offset_nm <= 0
       || max_backtracks < 0 || max_backtracks > 19
       || !std::isfinite(learning_rate) || learning_rate <= 0
@@ -126,6 +134,8 @@ void DelGpu::run(bool gui,
       retract_mode,
       post_joint_rounds,
       post_joint_trials);
+  logger_->report("DELGPU wire weight: {}", gpu ? wire_weight : 0.01);
+  logger_->report("DELGPU execution: postprocess_only={}", postprocess_only);
   clearGraphGraphics();
   auto* block = init();
   if (block == nullptr) {
@@ -148,6 +158,7 @@ void DelGpu::run(bool gui,
   }
   using Clock = std::chrono::steady_clock;
   const auto start = Clock::now();
+  const bool optimize = iterations > 0 || postprocess_only;
   std::vector<LayerNodes> graphs;
   size_t total_nodes = 0, total_arcs = 0;
   int processed = 0;
@@ -165,15 +176,15 @@ void DelGpu::run(bool gui,
     total_nodes += graph.nodes.size();
     total_arcs += graph.arcs.size();
     ++processed;
-    // Graph-only headless runs release each layer immediately. Iteration
+    // Graph-only headless runs release each layer immediately. Optimization
     // retains the host graph; display copies are created only with GUI enabled.
-    if (gui || iterations > 0) {
+    if (gui || optimize) {
       graphs.push_back(std::move(graph));
     }
   }
   const auto built = Clock::now();
   if (gui) {
-    if (iterations > 0) {
+    if (optimize) {
       showGraphGraphics(block, std::vector<LayerNodes>(graphs));
     } else {
       showGraphGraphics(block, std::move(graphs));
@@ -191,7 +202,7 @@ void DelGpu::run(bool gui,
       total_arcs,
       std::chrono::duration<double, std::milli>(built - start).count(),
       std::chrono::duration<double, std::milli>(shown - built).count());
-  if (iterations > 0) {
+  if (optimize) {
     runOptimization(block,
                     graphs,
                     gpu,
@@ -218,6 +229,7 @@ void DelGpu::run(bool gui,
                             || retract_mode == "ema_lpa",
                         retract_mode == "ema_jump" || retract_mode == "ema_lpa",
                         retract_mode == "ema_lpa"},
+                    wire_weight,
                     logger_);
   }
 }

@@ -13,7 +13,7 @@
 
 namespace leo {
 namespace {
-// Width 10 gives D = Dt = 50 DBU, Du = 30 DBU and default P = 150 DBU; all
+// Width 10 gives D = Dt = 50 DBU, Du = 30 DBU and default P = 200 DBU; all
 // positions below are doubled, as everywhere in the graph.
 constexpr int kWidth = 10;
 constexpr int64_t kPitch = 2 * kWidth;

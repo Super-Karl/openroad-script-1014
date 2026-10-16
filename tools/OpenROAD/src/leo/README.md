@@ -22,13 +22,16 @@ OpenROAD 可执行文件并启动新进程。模块也维护 CMake 源文件和�
 
 ```tcl
 leo
-# 与默认调用相同：k=3，P=3*Dt
-leo -prune_factor 3 -report /tmp/leo.csv
+# 与默认调用相同：k=4，P=4*Dt=20W
+leo -prune_factor 4 -report /tmp/leo.csv
 ```
 
 `-prune_factor` 必须为正整数。没有启用 OpenROAD GUI 时不会创建显示数据；
 在 GUI 中执行相同命令会更新 `LEO/<layer>/trims`、`vnodes`、`arcs/A|B|C`、`moves` 覆盖层。
 当前仍只移动图中 trim，不写回 OpenDB 的 routed wire。
+
+自2026-10-16起，默认移动区间长度上限改为20W，与delgpu一致；实际范围仍受金属障碍限制。
+此前文档中15W的实验结果对应 `leo -prune_factor 3`，可显式指定该参数复现。
 
 ## 当前算法
 
@@ -62,7 +65,7 @@ CSV 还输出 A/B/C 分类、已选区间违例、图中模型延长量和最大
 
 ```bash
 mkdir -p /tmp/leo-paper-run
-LEO_PRUNE_FACTOR=3 LEO_BENCHMARK_DIR=/tmp/leo-paper-run \
+LEO_PRUNE_FACTOR=4 LEO_BENCHMARK_DIR=/tmp/leo-paper-run \
   ./dev-openroad.sh run -no_splash -exit \
   tools/OpenROAD/src/leo/scripts/benchmark_baseline.tcl \
   > /tmp/leo-paper-run/benchmark.log 2>&1

@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2026, The OpenROAD Authors
 
-sta::define_cmd_args "delgpu" {[-gui boolean] [-verify boolean] [-backend gpu|cpu] [-max_iterations iterations] [-max_step width_multiple] [-jump_offset_nm nanometers] [-max_backtracks retries] [-learning_rate scale] [-learning_rate_end scale] [-learning_rate_mode linear|adaptive] [-postprocess boolean] [-post_sweeps rounds] [-post_pair_rounds rounds] [-post_retract_sweeps rounds] [-post_retract_mode single|cooperative|ema|ema_jump|ema_lpa] [-post_joint_rounds rounds] [-post_joint_trials candidates] [-frame_ms milliseconds] [-report csv_file]}
+sta::define_cmd_args "delgpu" {[-gui boolean] [-verify boolean] [-backend gpu|cpu] [-max_iterations iterations] [-max_step width_multiple] [-jump_offset_nm nanometers] [-max_backtracks retries] [-learning_rate scale] [-learning_rate_end scale] [-learning_rate_mode linear|adaptive] [-wire_weight positive_number] [-postprocess boolean] [-postprocess_only boolean] [-post_sweeps rounds] [-post_pair_rounds rounds] [-post_retract_sweeps rounds] [-post_retract_mode single|cooperative|ema|ema_jump|ema_lpa] [-post_joint_rounds rounds] [-post_joint_trials candidates] [-frame_ms milliseconds] [-report csv_file]}
 
 proc delgpu { args } {
-  sta::parse_key_args "delgpu" args keys {-gui -verify -backend -max_iterations -max_step -jump_offset_nm -max_backtracks -learning_rate -learning_rate_end -learning_rate_mode -postprocess -post_sweeps -post_pair_rounds -post_retract_sweeps -post_retract_mode -post_joint_rounds -post_joint_trials -frame_ms -report} flags {}
+  sta::parse_key_args "delgpu" args keys {-gui -verify -backend -max_iterations -max_step -jump_offset_nm -max_backtracks -learning_rate -learning_rate_end -learning_rate_mode -wire_weight -postprocess -postprocess_only -post_sweeps -post_pair_rounds -post_retract_sweeps -post_retract_mode -post_joint_rounds -post_joint_trials -frame_ms -report} flags {}
   sta::check_argc_eq0 "delgpu" $args
+  set wire_weight 0.01
+  set postprocess_only 0
   set postprocess 1
   set show 0
   set verify 0
   set backend gpu
-  foreach {key var} {-gui show -verify verify -postprocess postprocess} {
+  foreach {key var} {-gui show -verify verify -postprocess postprocess -postprocess_only postprocess_only} {
     if {[info exists keys($key)]} {
       if {![string is boolean -strict $keys($key)]} {
         error "delgpu: $key requires a boolean (0 or 1)"
@@ -47,7 +49,7 @@ proc delgpu { args } {
   set post_joint_trials 16
   set frame_ms 100
   set report ""
-  foreach {key var} {-max_iterations iterations -max_step max_step -jump_offset_nm jump_offset_nm -max_backtracks max_backtracks -learning_rate learning_rate -learning_rate_mode learning_rate_mode -post_sweeps post_sweeps -post_pair_rounds post_pair_rounds -post_retract_sweeps post_retract_sweeps -post_retract_mode post_retract_mode -post_joint_rounds post_joint_rounds -post_joint_trials post_joint_trials -frame_ms frame_ms -report report} {
+  foreach {key var} {-wire_weight wire_weight -max_iterations iterations -max_step max_step -jump_offset_nm jump_offset_nm -max_backtracks max_backtracks -learning_rate learning_rate -learning_rate_mode learning_rate_mode -post_sweeps post_sweeps -post_pair_rounds post_pair_rounds -post_retract_sweeps post_retract_sweeps -post_retract_mode post_retract_mode -post_joint_rounds post_joint_rounds -post_joint_trials post_joint_trials -frame_ms frame_ms -report report} {
     if {[info exists keys($key)]} { set $var $keys($key) }
   }
   if {![string is integer -strict $post_joint_rounds] || $post_joint_rounds < 0 || $post_joint_rounds > 64} {
@@ -61,6 +63,9 @@ proc delgpu { args } {
   }
   if {$post_joint_rounds > 0 && !$postprocess} {
     error "delgpu: joint search requires -postprocess 1"
+  }
+  if {$backend eq "cpu" && [info exists keys(-wire_weight)]} {
+    error "delgpu: -wire_weight controls only GPU; CPU reference uses 0.01"
   }
   if {$post_retract_mode ni {single cooperative ema ema_jump ema_lpa}} {
     error "delgpu: -post_retract_mode must be single, cooperative, ema, ema_jump or ema_lpa"
@@ -84,7 +89,16 @@ proc delgpu { args } {
       error "delgpu: $key requires a nonnegative 32-bit integer"
     }
   }
-  foreach {key value} [list -max_step $max_step -jump_offset_nm $jump_offset_nm -learning_rate $learning_rate -learning_rate_end $learning_rate_end] {
+  if {$postprocess_only} {
+    if {$backend ne "gpu" || !$postprocess} {
+      error "delgpu: -postprocess_only 1 requires GPU and -postprocess 1"
+    }
+    if {[info exists keys(-max_iterations)] && $iterations != 0} {
+      error "delgpu: -postprocess_only 1 requires -max_iterations 0 or omitting -max_iterations"
+    }
+    set iterations 0
+  }
+  foreach {key value} [list -wire_weight $wire_weight -max_step $max_step -jump_offset_nm $jump_offset_nm -learning_rate $learning_rate -learning_rate_end $learning_rate_end] {
     if {![string is double -strict $value] || !($value > 0 && $value < Inf)} {
       error "delgpu: $key requires a finite positive number"
     }
@@ -93,5 +107,5 @@ proc delgpu { args } {
     if {![info exists keys(-learning_rate_end)]} { set learning_rate_end [expr {min($learning_rate, 0.5)}] }
     if {$learning_rate_end > $learning_rate} { error "delgpu: adaptive learning_rate_end must not exceed learning_rate" }
   }
-  delgpu::run_cmd $show $verify [expr {$backend eq "gpu"}] $iterations $max_step $jump_offset_nm $frame_ms $report $max_backtracks $learning_rate $learning_rate_end $learning_rate_mode $postprocess $post_sweeps $post_pair_rounds $post_retract_sweeps $post_retract_mode $post_joint_rounds $post_joint_trials
+  delgpu::run_cmd $show $verify [expr {$backend eq "gpu"}] $iterations $max_step $jump_offset_nm $frame_ms $report $max_backtracks $learning_rate $learning_rate_end $learning_rate_mode $postprocess $post_sweeps $post_pair_rounds $post_retract_sweeps $post_retract_mode $post_joint_rounds $post_joint_trials $wire_weight $postprocess_only
 }

@@ -178,6 +178,7 @@ __global__ void gradientKernel(const OptNode* nodes,
                                const double* x,
                                const double* prev,
                                double lambda,
+                               double wire_weight,
                                double width,
                                double* direction,
                                Aggregate* work)
@@ -189,13 +190,13 @@ __global__ void gradientKernel(const OptNode* nodes,
   const auto node = nodes[i];
   const double pos = x[i], smooth = hypot(pos, 0.01);
   Aggregate a;
-  a.energy = 0.01 * (smooth - 0.01);
+  a.energy = wire_weight * (smooth - 0.01);
   a.extent = fabs(pos) * width;
   const double change = fabs(pos - prev[i]);
   a.change = change * width;
   a.moved = change > 1e-12;
   if (gradient) {
-    double g = 0.01 * pos / smooth;
+    double g = wire_weight * pos / smooth;
     for (int k = node.begin; k < node.end; ++k) {
       const int id = incident[k];
       g += (edges[id].src == i ? -1 : 1) * lambda * prime[id];
@@ -229,6 +230,7 @@ __global__ void moveKernel(const OptNode* nodes,
                            int attempt,
                            int backtrack,
                            double width,
+                           double wire_weight,
                            Aggregate* work)
 {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -247,7 +249,7 @@ __global__ void moveKernel(const OptNode* nodes,
               nodes[i].up);
   trial[i] = x;
   Aggregate a;
-  a.energy = 0.01 * (hypot(x, 0.01) - 0.01);
+  a.energy = wire_weight * (hypot(x, 0.01) - 0.01);
   a.extent = fabs(x) * width;
   const double change = fabs(x - prev[i]);
   a.moved = change > 1e-12;
@@ -416,7 +418,8 @@ class TrimOptimizer::Impl
        double step,
        double jump,
        int retries,
-       double rate)
+       double rate,
+       double alpha)
       : n(static_cast<int>(hn.size())),
         e(static_cast<int>(he.size())),
         width(w),
@@ -424,6 +427,7 @@ class TrimOptimizer::Impl
         max_step(step),
         jump_offset(jump),
         learning_rate(rate),
+        wire_weight(alpha),
         max_backtracks(retries),
         component_count(static_cast<int>(offsets.size()) - 1),
         nodes(hn.size()),
@@ -448,7 +452,8 @@ class TrimOptimizer::Impl
     if (n <= 0 || width <= 0 || !std::isfinite(width) || !std::isfinite(step)
         || step <= 0 || !std::isfinite(jump) || jump <= 0 || !std::isfinite(tol)
         || tol <= 0 || retries < 0 || retries > 19 || !std::isfinite(rate)
-        || rate <= 0 || !std::isfinite(step * rate) || step * rate <= 0) {
+        || rate <= 0 || !std::isfinite(step * rate) || step * rate <= 0
+        || !std::isfinite(alpha) || alpha <= 0) {
       throw std::invalid_argument("Invalid GPU optimizer parameters");
     }
     for (const auto& node : hn) {
@@ -543,6 +548,7 @@ class TrimOptimizer::Impl
                                                                 current,
                                                                 previous.get(),
                                                                 lambda,
+                                                                wire_weight,
                                                                 width,
                                                                 direction.get(),
                                                                 work.get());
@@ -579,6 +585,7 @@ class TrimOptimizer::Impl
                                                                current,
                                                                previous.get(),
                                                                lambda,
+                                                               wire_weight,
                                                                width,
                                                                direction.get(),
                                                                work.get());
@@ -600,6 +607,7 @@ class TrimOptimizer::Impl
                                                          attempt,
                                                          backtrack,
                                                          width,
+                                                         wire_weight,
                                                          work.get());
         if (e) {
           potentialKernel<false, false>
@@ -666,7 +674,7 @@ class TrimOptimizer::Impl
     return stats;
   }
   int n, e;
-  double width, tolerance, max_step, jump_offset, learning_rate;
+  double width, tolerance, max_step, jump_offset, learning_rate, wire_weight;
   int max_backtracks, component_count;
   Device<OptNode> nodes;
   Device<OptEdge> edges;
@@ -697,7 +705,8 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>& n,
                              double step,
                              double jump,
                              int retries,
-                             double rate)
+                             double rate,
+                             double wire_weight)
     : impl_(std::make_unique<Impl>(n,
                                    e,
                                    r,
@@ -710,7 +719,8 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>& n,
                                    step,
                                    jump,
                                    retries,
-                                   rate))
+                                   rate,
+                                   wire_weight))
 {
 }
 TrimOptimizer::~TrimOptimizer() = default;

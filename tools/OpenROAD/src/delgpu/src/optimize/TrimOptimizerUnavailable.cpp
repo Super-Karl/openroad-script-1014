@@ -18,6 +18,7 @@ TrimOptimizer::TrimOptimizer(const std::vector<OptNode>&,
                              double,
                              double,
                              int,
+                             double,
                              double)
 {
   throw std::runtime_error("GPU iteration backend was not compiled");

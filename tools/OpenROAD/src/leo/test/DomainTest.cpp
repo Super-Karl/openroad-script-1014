@@ -14,7 +14,7 @@ namespace leo {
 namespace {
 
 // Width 10 DBU: the trim box is 10 long and 20 tall, the default prune cap is
-// 150.
+// 200.
 constexpr int kWidth = 10;
 constexpr int64_t kCap2 = 2 * kDefaultPruneFactor * 5 * kWidth;
 
@@ -130,7 +130,7 @@ TEST(LeoDomains, LowEndNodeMirrors)
 
 TEST(LeoDomains, TravelIsCapped)
 {
-  // 50 W of free space above the trim, capped at 15 W.
+  // 50 W of free space above the trim, capped at 20 W.
   LayerNodes layer = layerWith({nodeAt(0, 0, true)});
   computeDomains(layer, {wire(-100, -5), wire(505, 600)});
   EXPECT_EQ(layer.nodes[0].u_move2, kCap2);

@@ -11,7 +11,7 @@ read_db $benchmark_db
 if {[gui::enabled]} { error "LEO timing must run without GUI" }
 set wire_before [del::regular_wire_length_dbu_cmd]
 puts "LEO BENCHMARK input=$benchmark_db gui=0 regular_wire_length_dbu=$wire_before"
-set benchmark_prune_factor 3
+set benchmark_prune_factor 4
 if {[info exists ::env(LEO_PRUNE_FACTOR)]} { set benchmark_prune_factor $::env(LEO_PRUNE_FACTOR) }
 puts "LEO BENCHMARK prune_factor=$benchmark_prune_factor P=k*Dt oracle=fresh_full_scans ema=first_improvement"
 puts "LEO BENCHMARK warmup"
